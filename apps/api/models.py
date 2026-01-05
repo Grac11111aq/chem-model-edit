@@ -14,6 +14,7 @@ class Atom(BaseModel):
 
 class Structure(BaseModel):
     atoms: List[Atom]
+    lattice: Optional[Lattice] = None
 
 
 class ParseRequest(BaseModel):
@@ -40,7 +41,7 @@ class Vector3(BaseModel):
     z: float
 
 
-class SupercellLattice(BaseModel):
+class Lattice(BaseModel):
     a: Vector3
     b: Vector3
     c: Vector3
@@ -50,7 +51,7 @@ class SupercellRequest(BaseModel):
     structureA: Structure
     structureB: Structure
     sequence: str
-    lattice: SupercellLattice
+    lattice: Lattice
 
 
 class SupercellMeta(BaseModel):

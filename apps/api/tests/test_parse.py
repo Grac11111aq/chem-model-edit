@@ -35,6 +35,11 @@ def test_parse_qe_ok():
     atoms = data['structure']['atoms']
     assert len(atoms) == 2
     assert atoms[0]['symbol'] == 'H'
+    lattice = data['structure'].get('lattice')
+    assert lattice is not None
+    assert lattice['a']['x'] == 5.0
+    assert lattice['b']['y'] == 5.0
+    assert lattice['c']['z'] == 5.0
 
 
 def test_parse_qe_invalid():

@@ -9,7 +9,7 @@ from ase import Atoms as ASEAtoms
 from ase.io import read as ase_read
 from pymatgen.io.pwscf import PWInput
 
-from models import Atom, Structure
+from models import Atom, Lattice, Structure, Vector3
 
 
 def _from_ase(content: str) -> Structure:
@@ -25,7 +25,8 @@ def _from_ase(content: str) -> Structure:
     parsed: List[Atom] = []
     for symbol, (x, y, z) in zip(symbols, positions):
         parsed.append(Atom(symbol=symbol, x=float(x), y=float(y), z=float(z)))
-    return Structure(atoms=parsed)
+    lattice = _lattice_from_vectors(atoms_obj.get_cell().tolist())
+    return Structure(atoms=parsed, lattice=lattice)
 
 
 def _from_pymatgen(content: str) -> Structure:
@@ -41,7 +42,8 @@ def _from_pymatgen(content: str) -> Structure:
                 z=float(site.coords[2]),
             )
         )
-    return Structure(atoms=parsed)
+    lattice = _lattice_from_vectors(structure.lattice.matrix.tolist())
+    return Structure(atoms=parsed, lattice=lattice)
 
 
 BOHR_TO_ANGSTROM = 0.529177210903
@@ -118,6 +120,22 @@ def _parse_system_params(content: str) -> dict[str, Optional[float]]:
         "b": b_angstrom,
         "c": c_angstrom,
     }
+
+
+def _lattice_from_vectors(
+    vectors: Optional[List[List[float]]],
+) -> Optional[Lattice]:
+    if not vectors or len(vectors) < 3:
+        return None
+    flat = [abs(value) for row in vectors[:3] for value in row[:3]]
+    if all(value < 1.0e-8 for value in flat):
+        return None
+    a, b, c = vectors[0], vectors[1], vectors[2]
+    return Lattice(
+        a=Vector3(x=float(a[0]), y=float(a[1]), z=float(a[2])),
+        b=Vector3(x=float(b[0]), y=float(b[1]), z=float(b[2])),
+        c=Vector3(x=float(c[0]), y=float(c[1]), z=float(c[2])),
+    )
 
 
 def _lattice_from_ibrav(params: dict[str, Optional[float]]) -> Optional[List[Tuple[float, float, float]]]:
@@ -271,7 +289,7 @@ def _from_manual_positions(content: str) -> Structure:
             y = coords[0] * lattice[0][1] + coords[1] * lattice[1][1] + coords[2] * lattice[2][1]
             z = coords[0] * lattice[0][2] + coords[1] * lattice[1][2] + coords[2] * lattice[2][2]
             parsed.append(Atom(symbol=symbol, x=float(x), y=float(y), z=float(z)))
-        return Structure(atoms=parsed)
+        return Structure(atoms=parsed, lattice=_lattice_from_vectors(lattice))
 
     if unit == "bohr":
         scale = BOHR_TO_ANGSTROM
@@ -292,7 +310,7 @@ def _from_manual_positions(content: str) -> Structure:
                 z=float(coords[2] * scale),
             )
         )
-    return Structure(atoms=parsed)
+    return Structure(atoms=parsed, lattice=_lattice_from_vectors(lattice))
 
 
 def parse_qe_in(content: str) -> Structure:

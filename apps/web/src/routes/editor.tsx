@@ -13,7 +13,7 @@ import MolstarViewer from '../components/molstar/MolstarViewer'
 import { downloadShareHtml } from '../components/share/html-export'
 import { exportQeInput, parseQeInput } from '../lib/api'
 import { atomsToPdb } from '../lib/pdb'
-import type { Atom } from '../lib/types'
+import type { Atom, Lattice, Vector3 } from '../lib/types'
 import { atomsToXyz, parseXyzBlock } from '../lib/xyz'
 import {
   alignSelectedCentroid,
@@ -36,6 +36,89 @@ type StructureState = {
   drafts: AtomDraft[]
   isVisible: boolean
   opacity: number
+  lattice?: Lattice | null
+}
+
+type Matrix3 = [
+  [number, number, number],
+  [number, number, number],
+  [number, number, number],
+]
+
+const LATTICE_TOLERANCE = 1.0e-3
+
+const latticeToMatrix = (lattice: Lattice): Matrix3 => [
+  [lattice.a.x, lattice.a.y, lattice.a.z],
+  [lattice.b.x, lattice.b.y, lattice.b.z],
+  [lattice.c.x, lattice.c.y, lattice.c.z],
+]
+
+const maxAbsDifference = (a: Matrix3, b: Matrix3) => {
+  let max = 0
+  for (let i = 0; i < 3; i += 1) {
+    for (let j = 0; j < 3; j += 1) {
+      const diff = Math.abs(a[i][j] - b[i][j])
+      if (diff > max) {
+        max = diff
+      }
+    }
+  }
+  return max
+}
+
+const invert3 = (m: Matrix3): Matrix3 | null => {
+  const [
+    [a00, a01, a02],
+    [a10, a11, a12],
+    [a20, a21, a22],
+  ] = m
+  const b01 = a22 * a11 - a12 * a21
+  const b11 = -a22 * a10 + a12 * a20
+  const b21 = a21 * a10 - a11 * a20
+  const det = a00 * b01 + a01 * b11 + a02 * b21
+  if (Math.abs(det) < 1.0e-12) {
+    return null
+  }
+  const invDet = 1 / det
+  return [
+    [
+      b01 * invDet,
+      (-a22 * a01 + a02 * a21) * invDet,
+      (a12 * a01 - a02 * a11) * invDet,
+    ],
+    [
+      b11 * invDet,
+      (a22 * a00 - a02 * a20) * invDet,
+      (-a12 * a00 + a02 * a10) * invDet,
+    ],
+    [
+      b21 * invDet,
+      (-a21 * a00 + a01 * a20) * invDet,
+      (a11 * a00 - a01 * a10) * invDet,
+    ],
+  ]
+}
+
+const multiplyMatVec = (m: Matrix3, v: Vector3): Vector3 => ({
+  x: m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z,
+  y: m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z,
+  z: m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z,
+})
+
+const wrapFractional = (v: Vector3): Vector3 => ({
+  x: v.x - Math.round(v.x),
+  y: v.y - Math.round(v.y),
+  z: v.z - Math.round(v.z),
+})
+
+const minimumImageDelta = (
+  delta: Vector3,
+  lattice: Matrix3,
+  inverse: Matrix3,
+): Vector3 => {
+  const fractional = multiplyMatVec(inverse, delta)
+  const wrapped = wrapFractional(fractional)
+  return multiplyMatVec(lattice, wrapped)
 }
 
 export const Route = createFileRoute('/editor')({
@@ -59,6 +142,7 @@ function EditorPage() {
       drafts: [],
       isVisible: true,
       opacity: 1,
+      lattice: null,
     },
     {
       id: 'B',
@@ -68,6 +152,7 @@ function EditorPage() {
       drafts: [],
       isVisible: true,
       opacity: 0.5,
+      lattice: null,
     },
   ])
   const [activeId, setActiveId] = useState(structures[0]?.id ?? 'A')
@@ -156,7 +241,7 @@ function EditorPage() {
     () => structures.find((structure) => structure.id === compareTargetId) ?? null,
     [compareTargetId, structures],
   )
-  const compareMismatch = useMemo(() => {
+  const countMismatch = useMemo(() => {
     if (!compareTarget) {
       return false
     }
@@ -165,6 +250,27 @@ function EditorPage() {
     }
     return atoms.length !== compareTarget.atoms.length
   }, [atoms.length, compareTarget])
+  const pbcState = useMemo(() => {
+    if (!compareTarget) {
+      return { enabled: false, reason: '比較対象なし' }
+    }
+    const latticeA = activeStructure?.lattice ?? null
+    const latticeB = compareTarget.lattice ?? null
+    if (!latticeA || !latticeB) {
+      return { enabled: false, reason: '格子情報が不足' }
+    }
+    const matrixA = latticeToMatrix(latticeA)
+    const matrixB = latticeToMatrix(latticeB)
+    const mismatch = maxAbsDifference(matrixA, matrixB) > LATTICE_TOLERANCE
+    if (mismatch) {
+      return { enabled: false, reason: '格子が一致しない', mismatch: true }
+    }
+    const inverse = invert3(matrixA)
+    if (!inverse) {
+      return { enabled: false, reason: '格子が特異', mismatch: false }
+    }
+    return { enabled: true, reason: 'PBC有効', matrix: matrixA, inverse }
+  }, [activeStructure?.lattice, compareTarget, activeStructure])
   const selectedAtoms = useMemo(
     () => selectedIndices.map((index) => atoms[index]).filter(Boolean),
     [atoms, selectedIndices],
@@ -181,17 +287,23 @@ function EditorPage() {
     return indices.map((index) => {
       const source = atoms[index]
       const target = compareTarget.atoms[index]
-      const dx = source.x - target.x
-      const dy = source.y - target.y
-      const dz = source.z - target.z
+      const delta = {
+        x: source.x - target.x,
+        y: source.y - target.y,
+        z: source.z - target.z,
+      }
+      const adjusted =
+        pbcState.enabled && pbcState.matrix && pbcState.inverse
+          ? minimumImageDelta(delta, pbcState.matrix, pbcState.inverse)
+          : delta
       return {
         index,
         source,
         target,
-        dist: Math.sqrt(dx * dx + dy * dy + dz * dz),
+        dist: Math.sqrt(adjusted.x ** 2 + adjusted.y ** 2 + adjusted.z ** 2),
       }
     })
-  }, [atoms, compareTarget, selectedIndices])
+  }, [atoms, compareTarget, selectedIndices, pbcState])
   const selectedDistance = useMemo(() => {
     if (selectedAtoms.length < 2) {
       return null
@@ -245,6 +357,7 @@ function EditorPage() {
         ...current,
         atoms: structure.atoms,
         drafts: makeDrafts(structure.atoms),
+        lattice: structure.lattice ?? null,
       }))
       setSelectedIndices([])
     } catch (err) {
@@ -482,6 +595,7 @@ function EditorPage() {
         drafts: [],
         isVisible: true,
         opacity: 1,
+        lattice: null,
       }
       setActiveId(id)
       setSelectedIndices([])
@@ -689,9 +803,20 @@ function EditorPage() {
                     ))}
                   </select>
                 </div>
-                {compareMismatch ? (
+                {countMismatch ? (
                   <div className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
                     原子数が一致しません。インデックス対応の転写・距離に影響します。
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between">
+                  <span>PBC</span>
+                  <span className="rounded-full border border-white/10 px-3 py-1 text-xs">
+                    {pbcState.enabled ? 'On' : 'Off'}
+                  </span>
+                </div>
+                {!pbcState.enabled && compareTarget ? (
+                  <div className="rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-xs text-white/50">
+                    {pbcState.reason}
                   </div>
                 ) : null}
                 <div className="flex items-center justify-between">

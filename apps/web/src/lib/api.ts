@@ -1,4 +1,4 @@
-import type { Structure, SupercellMeta, Vector3 } from './types'
+import type { Lattice, Structure, SupercellMeta } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
 
@@ -46,7 +46,7 @@ export async function generateSupercell(params: {
   structureA: Structure
   structureB: Structure
   sequence: string
-  lattice: { a: Vector3; b: Vector3; c: Vector3 }
+  lattice: Lattice
 }): Promise<{ structure: Structure; meta: SupercellMeta }> {
   const response = await fetch(`${API_BASE}/supercell`, {
     method: 'POST',

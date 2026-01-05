@@ -5,8 +5,21 @@ export type Atom = {
   z: number
 }
 
+export type Vector3 = {
+  x: number
+  y: number
+  z: number
+}
+
+export type Lattice = {
+  a: Vector3
+  b: Vector3
+  c: Vector3
+}
+
 export type Structure = {
   atoms: Atom[]
+  lattice?: Lattice | null
 }
 
 export type ParseRequest = {
@@ -27,21 +40,11 @@ export type ExportResponse = {
   content: string
 }
 
-export type Vector3 = {
-  x: number
-  y: number
-  z: number
-}
-
 export type SupercellRequest = {
   structureA: Structure
   structureB: Structure
   sequence: string
-  lattice: {
-    a: Vector3
-    b: Vector3
-    c: Vector3
-  }
+  lattice: Lattice
 }
 
 export type SupercellResponse = {

@@ -59,7 +59,7 @@
 - [x] T030 [US2] フロント: 比較対象の選択UI（A/Bを中心に切替）
 - [x] T031 [US2] フロント: 表面領域の選択UI（手動選択をベース）
 - [x] T032 [US2] 表面転写（インデックス対応、Cartesian座標の上書き）
-- [x] T033 [US2] 対応原子距離レポート（PBC未対応、後続で最小像）
+- [x] T033 [US2] 対応原子距離レポート（PBC最小像を適用）
 - [x] T034 [US2] 事前検証（原子数非互換の警告）
 - [x] T035 [US2] フロント: 距離テーブルUI
 - [x] T036 [US5] フロント: 重ね表示ON/OFFと構造ごとの表示/透明度をMol*へ反映（`apps/web/src/components/molstar/MolstarViewer.tsx`, `apps/web/src/routes/editor.tsx`）
