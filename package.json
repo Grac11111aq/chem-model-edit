@@ -1,0 +1,16 @@
+{
+  "name": "chem-model-edit",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.27.0",
+  "scripts": {
+    "dev": "pnpm -C apps/web dev",
+    "build": "pnpm -C apps/web build",
+    "preview": "pnpm -C apps/web preview",
+    "typecheck": "pnpm -C apps/web typecheck",
+    "lint": "pnpm -C apps/web lint",
+    "format": "pnpm -C apps/web format",
+    "test": "pnpm -C apps/web test",
+    "test:ui": "pnpm -C apps/web test:ui"
+  }
+}
