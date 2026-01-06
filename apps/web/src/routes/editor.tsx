@@ -45,6 +45,10 @@ type Matrix3 = [
   [number, number, number],
 ]
 
+type PbcState =
+  | { enabled: false; reason: string; mismatch?: boolean }
+  | { enabled: true; reason: string; matrix: Matrix3; inverse: Matrix3 }
+
 const LATTICE_TOLERANCE = 1.0e-3
 
 const latticeToMatrix = (lattice: Lattice): Matrix3 => [
@@ -250,7 +254,7 @@ function EditorPage() {
     }
     return atoms.length !== compareTarget.atoms.length
   }, [atoms.length, compareTarget])
-  const pbcState = useMemo(() => {
+  const pbcState = useMemo<PbcState>(() => {
     if (!compareTarget) {
       return { enabled: false, reason: '比較対象なし' }
     }
@@ -295,9 +299,7 @@ function EditorPage() {
         y: source.y - target.y,
         z: source.z - target.z,
       }
-      const usePbc =
-        pbcState.enabled && 'matrix' in pbcState && 'inverse' in pbcState
-      const adjusted = usePbc
+      const adjusted = pbcState.enabled
         ? minimumImageDelta(delta, pbcState.matrix, pbcState.inverse)
         : delta
       return {

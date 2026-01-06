@@ -4,8 +4,9 @@ from dataclasses import dataclass
 from io import StringIO
 import math
 import re
-from typing import List, Optional, Tuple
+from typing import Any, Callable, List, Tuple
 
+ase_read: Callable[..., Any] | None
 try:
     from ase.io import read as ase_read
 except Exception:
@@ -97,12 +98,12 @@ def _last_positions_from_output(
 ) -> List[Tuple[float, float, float]]:
     if ase_read is not None:
         try:
-            atoms = ase_read(StringIO(content), format="espresso-out", index=-1)
-            if isinstance(atoms, list):
-                if not atoms:
+            ase_atoms = ase_read(StringIO(content), format="espresso-out", index=-1)
+            if isinstance(ase_atoms, list):
+                if not ase_atoms:
                     raise ValueError("ASEが構造を返しませんでした。")
-                atoms = atoms[-1]
-            positions = atoms.get_positions()
+                ase_atoms = ase_atoms[-1]
+            positions = ase_atoms.get_positions()
             if len(positions) == nat_expected:
                 return [(float(x), float(y), float(z)) for x, y, z in positions]
         except Exception:
@@ -114,7 +115,7 @@ def _last_positions_from_output(
         raise ValueError("出力に ATOMIC_POSITIONS が見つかりません。")
 
     for start in reversed(idxs):
-        atoms: List[Tuple[float, float, float]] = []
+        coords: List[Tuple[float, float, float]] = []
         for ln in lines[start + 1 :]:
             s = ln.strip()
             if not s:
@@ -122,11 +123,11 @@ def _last_positions_from_output(
             parts = s.split()
             if len(parts) < 4 or not _is_float(parts[1]):
                 break
-            atoms.append((_parse_float(parts[1]), _parse_float(parts[2]), _parse_float(parts[3])))
-            if len(atoms) == nat_expected:
+            coords.append((_parse_float(parts[1]), _parse_float(parts[2]), _parse_float(parts[3])))
+            if len(coords) == nat_expected:
                 break
-        if len(atoms) == nat_expected:
-            return atoms
+        if len(coords) == nat_expected:
+            return coords
 
     raise ValueError(
         "出力の ATOMIC_POSITIONS から最終座標を取得できませんでした。"

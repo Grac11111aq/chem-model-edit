@@ -19,5 +19,9 @@ __pycache__
 # Logs
 pnpm-debug.log*
 
+# Local runtime dirs
+.xdg-runtime
+.just-runtime
+
 # User uploads (temporary)
 /uploads

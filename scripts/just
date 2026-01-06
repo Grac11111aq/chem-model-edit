@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+runtime_dir="${XDG_RUNTIME_DIR:-}"
+if [[ -n "${runtime_dir}" ]]; then
+  if mkdir -p "${runtime_dir}/just" 2>/dev/null; then
+    :
+  else
+    runtime_dir=""
+  fi
+fi
+
+if [[ -z "${runtime_dir}" ]]; then
+  runtime_dir="${ROOT_DIR}/.xdg-runtime"
+  mkdir -p "${runtime_dir}"
+  chmod 700 "${runtime_dir}"
+  export XDG_RUNTIME_DIR="${runtime_dir}"
+fi
+
+exec just "$@"
