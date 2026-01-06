@@ -5,7 +5,7 @@ from typing import Iterable, List, Tuple
 from models import Atom, Lattice, Structure, SupercellMeta, Vector3
 
 
-def _shift_atoms(atoms: Iterable[Atom], shift: Tuple[float, float, float]) -> List[Atom]:
+def _apply_shift(atoms: Iterable[Atom], shift: Tuple[float, float, float]) -> List[Atom]:
     dx, dy, dz = shift
     return [
         Atom(
@@ -54,14 +54,14 @@ def generate_supercell(
                 raise ValueError(f"未知のシーケンス記号: {layer}")
             source = structure_a if layer == 'A' else structure_b
             atoms_out.extend(
-                _shift_atoms(
+                _apply_shift(
                     source.atoms,
                     (
                         a_shift[0] + b_shift[0],
                         a_shift[1] + b_shift[1],
                         a_shift[2] + b_shift[2],
                     ),
-                )
+                ),
             )
             a_shift = (
                 a_shift[0] + va[0],
@@ -119,14 +119,9 @@ def generate_tiled_supercell(
                 va[1] * col_index + vb[1] * row_index,
                 va[2] * col_index + vb[2] * row_index,
             )
-            for atom in source.atoms:
-                new_atom = Atom(
-                    symbol=atom.symbol,
-                    x=atom.x + shift[0],
-                    y=atom.y + shift[1],
-                    z=atom.z + shift[2],
-                )
-                if check_overlap and overlap_tolerance is not None:
+            shifted_atoms = _apply_shift(source.atoms, shift)
+            if check_overlap and overlap_tolerance is not None:
+                for new_atom in shifted_atoms:
                     for existing in atoms_out:
                         dx = existing.x - new_atom.x
                         dy = existing.y - new_atom.y
@@ -134,7 +129,7 @@ def generate_tiled_supercell(
                         if dx * dx + dy * dy + dz * dz <= tolerance_sq:
                             overlap_count += 1
                             break
-                atoms_out.append(new_atom)
+            atoms_out.extend(shifted_atoms)
 
     out_lattice = Lattice(
         a=_scale_vector(lattice.a, width),
