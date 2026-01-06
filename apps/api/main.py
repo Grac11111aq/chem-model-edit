@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from models import (
     DeltaTransplantRequest,
@@ -34,6 +35,11 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(ValueError)
+def handle_value_error(_: Request, exc: ValueError) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -41,19 +47,13 @@ def health() -> dict[str, str]:
 
 @app.post("/parse", response_model=ParseResponse)
 def parse_qe(request: ParseRequest) -> ParseResponse:
-    try:
-        structure = parse_qe_in(request.content)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    structure = parse_qe_in(request.content)
     return ParseResponse(structure=structure)
 
 
 @app.post("/export", response_model=ExportResponse)
 def export_qe(request: ExportRequest) -> ExportResponse:
-    try:
-        content = export_qe_in(request.structure)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    content = export_qe_in(request.structure)
     return ExportResponse(content=content)
 
 
@@ -61,44 +61,35 @@ def export_qe(request: ExportRequest) -> ExportResponse:
 def transplant_delta_route(
     request: DeltaTransplantRequest,
 ) -> DeltaTransplantResponse:
-    try:
-        content = transplant_delta(
-            request.small_in,
-            request.small_out,
-            request.large_in,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    content = transplant_delta(
+        request.small_in,
+        request.small_out,
+        request.large_in,
+    )
     return DeltaTransplantResponse(content=content)
 
 
 @app.post("/supercell", response_model=SupercellResponse)
 def supercell(request: SupercellRequest) -> SupercellResponse:
-    try:
-        structure, meta = generate_supercell(
-            request.structureA,
-            request.structureB,
-            request.sequence,
-            request.lattice,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    structure, meta = generate_supercell(
+        request.structureA,
+        request.structureB,
+        request.sequence,
+        request.lattice,
+    )
     return SupercellResponse(structure=structure, meta=meta)
 
 
 @app.post("/supercell/tiled", response_model=SupercellResponse)
 def supercell_tiled(request: TiledSupercellRequest) -> SupercellResponse:
-    try:
-        structure, meta = generate_tiled_supercell(
-            request.structureA,
-            request.structureB,
-            request.pattern,
-            request.lattice,
-            check_overlap=request.checkOverlap,
-            overlap_tolerance=request.overlapTolerance,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    structure, meta = generate_tiled_supercell(
+        request.structureA,
+        request.structureB,
+        request.pattern,
+        request.lattice,
+        check_overlap=request.checkOverlap,
+        overlap_tolerance=request.overlapTolerance,
+    )
     return SupercellResponse(structure=structure, meta=meta)
 
 
@@ -106,10 +97,7 @@ def supercell_tiled(request: TiledSupercellRequest) -> SupercellResponse:
 def lattice_vectors_to_params(
     request: LatticeConvertFromVectorsRequest,
 ) -> LatticeConvertResponse:
-    try:
-        params = vectors_to_params(request.lattice)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    params = vectors_to_params(request.lattice)
     return LatticeConvertResponse(lattice=request.lattice, params=params, unit=request.unit)
 
 
@@ -117,8 +105,5 @@ def lattice_vectors_to_params(
 def lattice_params_to_vectors(
     request: LatticeConvertFromParamsRequest,
 ) -> LatticeConvertResponse:
-    try:
-        lattice = params_to_vectors(request.params)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    lattice = params_to_vectors(request.params)
     return LatticeConvertResponse(lattice=lattice, params=request.params, unit=request.unit)
