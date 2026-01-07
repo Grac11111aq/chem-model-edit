@@ -1,5 +1,6 @@
 set shell := ["bash", "-cu"]
 uv_cache_dir := ".uv-cache"
+uv_tmp_dir := ".uv-tmp"
 web_port := "3001"
 api_port := "8000"
 
@@ -69,8 +70,9 @@ api:
     echo "API_PORT $initial_port は使用中のため $port を利用します"
   fi
   cd apps/api
-  UV_CACHE_DIR={{uv_cache_dir}} uv sync
-  UV_CACHE_DIR={{uv_cache_dir}} uv run uvicorn main:app --reload --port "$port"
+  mkdir -p {{uv_cache_dir}} {{uv_tmp_dir}}
+  TMPDIR={{uv_tmp_dir}} UV_CACHE_DIR={{uv_cache_dir}} uv sync
+  TMPDIR={{uv_tmp_dir}} UV_CACHE_DIR={{uv_cache_dir}} uv run uvicorn main:app --reload --port "$port"
 
 dev:
   #!/usr/bin/env bash
@@ -110,8 +112,9 @@ dev:
     echo "WEB_PORT $initial_web_port は使用中のため $web_port を利用します"
   fi
   pushd apps/api >/dev/null
-  UV_CACHE_DIR={{uv_cache_dir}} uv sync
-  UV_CACHE_DIR={{uv_cache_dir}} uv run uvicorn main:app --reload --port "$api_port" &
+  mkdir -p {{uv_cache_dir}} {{uv_tmp_dir}}
+  TMPDIR={{uv_tmp_dir}} UV_CACHE_DIR={{uv_cache_dir}} uv sync
+  TMPDIR={{uv_tmp_dir}} UV_CACHE_DIR={{uv_cache_dir}} uv run uvicorn main:app --reload --port "$api_port" &
   popd >/dev/null
   pnpm -C apps/web dev --port "$web_port" &
   wait
