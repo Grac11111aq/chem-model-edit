@@ -24,9 +24,13 @@ def vectors_to_params(lattice: Lattice) -> LatticeParams:
     if a_len <= 0 or b_len <= 0 or c_len <= 0:
         raise ValueError("格子ベクトルの長さが無効です。")
 
-    alpha = math.degrees(math.acos(_clamp(_dot(lattice.b, lattice.c) / (b_len * c_len))))
+    alpha = math.degrees(
+        math.acos(_clamp(_dot(lattice.b, lattice.c) / (b_len * c_len)))
+    )
     beta = math.degrees(math.acos(_clamp(_dot(lattice.a, lattice.c) / (a_len * c_len))))
-    gamma = math.degrees(math.acos(_clamp(_dot(lattice.a, lattice.b) / (a_len * b_len))))
+    gamma = math.degrees(
+        math.acos(_clamp(_dot(lattice.a, lattice.b) / (a_len * b_len)))
+    )
     return LatticeParams(
         a=a_len,
         b=b_len,

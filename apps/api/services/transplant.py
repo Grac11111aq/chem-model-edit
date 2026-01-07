@@ -29,7 +29,13 @@ class Structure:
 
 
 _FLOAT_RE = re.compile(r"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eEdD][+-]?\d+)?$")
-_SECTION_STOP = ("k_points", "cell_parameters", "atomic_species", "constraints", "occupations")
+_SECTION_STOP = (
+    "k_points",
+    "cell_parameters",
+    "atomic_species",
+    "constraints",
+    "occupations",
+)
 
 
 def _is_float(tok: str) -> bool:
@@ -110,7 +116,11 @@ def _last_positions_from_output(
             pass
 
     lines = content.splitlines()
-    idxs = [i for i, ln in enumerate(lines) if ln.strip().lower().startswith("atomic_positions")]
+    idxs = [
+        i
+        for i, ln in enumerate(lines)
+        if ln.strip().lower().startswith("atomic_positions")
+    ]
     if not idxs:
         raise ValueError("出力に ATOMIC_POSITIONS が見つかりません。")
 
@@ -123,7 +133,9 @@ def _last_positions_from_output(
             parts = s.split()
             if len(parts) < 4 or not _is_float(parts[1]):
                 break
-            coords.append((_parse_float(parts[1]), _parse_float(parts[2]), _parse_float(parts[3])))
+            coords.append(
+                (_parse_float(parts[1]), _parse_float(parts[2]), _parse_float(parts[3]))
+            )
             if len(coords) == nat_expected:
                 break
         if len(coords) == nat_expected:
@@ -195,7 +207,9 @@ def transplant_delta(small_in: str, small_out: str, large_in: str) -> str:
     if Lx <= 0 or Ly <= 0:
         raise ValueError("セル長が不正です。")
 
-    small_rel_xyz = _last_positions_from_output(small_out, nat_expected=len(small0.atoms))
+    small_rel_xyz = _last_positions_from_output(
+        small_out, nat_expected=len(small0.atoms)
+    )
 
     small_mov = [i for i, atom in enumerate(small0.atoms) if atom.flags != (0, 0, 0)]
     large_mov = [i for i, atom in enumerate(large0.atoms) if atom.flags != (0, 0, 0)]

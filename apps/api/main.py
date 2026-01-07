@@ -98,7 +98,9 @@ def lattice_vectors_to_params(
     request: LatticeConvertFromVectorsRequest,
 ) -> LatticeConvertResponse:
     params = vectors_to_params(request.lattice)
-    return LatticeConvertResponse(lattice=request.lattice, params=params, unit=request.unit)
+    return LatticeConvertResponse(
+        lattice=request.lattice, params=params, unit=request.unit
+    )
 
 
 @app.post("/lattice/params-to-vectors", response_model=LatticeConvertResponse)
@@ -106,4 +108,6 @@ def lattice_params_to_vectors(
     request: LatticeConvertFromParamsRequest,
 ) -> LatticeConvertResponse:
     lattice = params_to_vectors(request.params)
-    return LatticeConvertResponse(lattice=lattice, params=request.params, unit=request.unit)
+    return LatticeConvertResponse(
+        lattice=lattice, params=request.params, unit=request.unit
+    )

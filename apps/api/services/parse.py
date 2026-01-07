@@ -139,7 +139,9 @@ def _lattice_from_vectors(
     )
 
 
-def _lattice_from_ibrav(params: dict[str, Optional[float]]) -> Optional[List[Tuple[float, float, float]]]:
+def _lattice_from_ibrav(
+    params: dict[str, Optional[float]],
+) -> Optional[List[Tuple[float, float, float]]]:
     ibrav_val = params.get("ibrav")
     if ibrav_val is None:
         return None
@@ -153,9 +155,17 @@ def _lattice_from_ibrav(params: dict[str, Optional[float]]) -> Optional[List[Tup
     if ibrav == 1:
         return [(a, 0.0, 0.0), (0.0, a, 0.0), (0.0, 0.0, a)]
     if ibrav == 2:
-        return [(0.0, a / 2.0, a / 2.0), (a / 2.0, 0.0, a / 2.0), (a / 2.0, a / 2.0, 0.0)]
+        return [
+            (0.0, a / 2.0, a / 2.0),
+            (a / 2.0, 0.0, a / 2.0),
+            (a / 2.0, a / 2.0, 0.0),
+        ]
     if ibrav == 3:
-        return [(-a / 2.0, a / 2.0, a / 2.0), (a / 2.0, -a / 2.0, a / 2.0), (a / 2.0, a / 2.0, -a / 2.0)]
+        return [
+            (-a / 2.0, a / 2.0, a / 2.0),
+            (a / 2.0, -a / 2.0, a / 2.0),
+            (a / 2.0, a / 2.0, -a / 2.0),
+        ]
 
     if ibrav == 4:
         if c is None:
@@ -184,7 +194,11 @@ def _lattice_from_ibrav(params: dict[str, Optional[float]]) -> Optional[List[Tup
     if ibrav == 10:
         if b is None or c is None:
             return None
-        return [(0.0, b / 2.0, c / 2.0), (a / 2.0, 0.0, c / 2.0), (a / 2.0, b / 2.0, 0.0)]
+        return [
+            (0.0, b / 2.0, c / 2.0),
+            (a / 2.0, 0.0, c / 2.0),
+            (a / 2.0, b / 2.0, 0.0),
+        ]
     if ibrav == 11:
         if b is None or c is None:
             return None
@@ -196,7 +210,9 @@ def _lattice_from_ibrav(params: dict[str, Optional[float]]) -> Optional[List[Tup
     return None
 
 
-def _parse_cell_parameters(content: str, params: dict[str, Optional[float]]) -> Optional[List[Tuple[float, float, float]]]:
+def _parse_cell_parameters(
+    content: str, params: dict[str, Optional[float]]
+) -> Optional[List[Tuple[float, float, float]]]:
     lines = content.splitlines()
     for idx, raw in enumerate(lines):
         match = _CELL_HEADER.match(raw)
@@ -227,19 +243,27 @@ def _parse_cell_parameters(content: str, params: dict[str, Optional[float]]) -> 
             return vectors
         if unit == "bohr":
             return [
-                (v[0] * BOHR_TO_ANGSTROM, v[1] * BOHR_TO_ANGSTROM, v[2] * BOHR_TO_ANGSTROM)
+                (
+                    v[0] * BOHR_TO_ANGSTROM,
+                    v[1] * BOHR_TO_ANGSTROM,
+                    v[2] * BOHR_TO_ANGSTROM,
+                )
                 for v in vectors
             ]
         if unit == "alat":
             a = params.get("a")
             if a is None:
-                raise ValueError("CELL_PARAMETERS が alat 指定ですが格子定数が見つかりません。")
+                raise ValueError(
+                    "CELL_PARAMETERS が alat 指定ですが格子定数が見つかりません。"
+                )
             return [(v[0] * a, v[1] * a, v[2] * a) for v in vectors]
         return vectors
     return None
 
 
-def _extract_atomic_positions(content: str) -> Tuple[str, List[Tuple[str, Tuple[float, float, float]]]]:
+def _extract_atomic_positions(
+    content: str,
+) -> Tuple[str, List[Tuple[str, Tuple[float, float, float]]]]:
     lines = content.splitlines()
     for idx, raw in enumerate(lines):
         match = _POSITION_HEADER.match(raw)
@@ -284,11 +308,25 @@ def _from_manual_positions(content: str) -> Structure:
     parsed: List[Atom] = []
     if unit in ("crystal", "crystal_sg"):
         if lattice is None:
-            raise ValueError("ATOMIC_POSITIONS が crystal 指定ですが格子情報が不足しています。")
+            raise ValueError(
+                "ATOMIC_POSITIONS が crystal 指定ですが格子情報が不足しています。"
+            )
         for symbol, coords in entries:
-            x = coords[0] * lattice[0][0] + coords[1] * lattice[1][0] + coords[2] * lattice[2][0]
-            y = coords[0] * lattice[0][1] + coords[1] * lattice[1][1] + coords[2] * lattice[2][1]
-            z = coords[0] * lattice[0][2] + coords[1] * lattice[1][2] + coords[2] * lattice[2][2]
+            x = (
+                coords[0] * lattice[0][0]
+                + coords[1] * lattice[1][0]
+                + coords[2] * lattice[2][0]
+            )
+            y = (
+                coords[0] * lattice[0][1]
+                + coords[1] * lattice[1][1]
+                + coords[2] * lattice[2][1]
+            )
+            z = (
+                coords[0] * lattice[0][2]
+                + coords[1] * lattice[1][2]
+                + coords[2] * lattice[2][2]
+            )
             parsed.append(Atom(symbol=symbol, x=float(x), y=float(y), z=float(z)))
         return Structure(atoms=parsed, lattice=_lattice_from_vectors(lattice))
 
@@ -297,7 +335,9 @@ def _from_manual_positions(content: str) -> Structure:
     elif unit == "alat":
         alat = params.get("a")
         if alat is None:
-            raise ValueError("ATOMIC_POSITIONS が alat 指定ですが格子定数が見つかりません。")
+            raise ValueError(
+                "ATOMIC_POSITIONS が alat 指定ですが格子定数が見つかりません。"
+            )
         scale = alat
     else:
         scale = 1.0
