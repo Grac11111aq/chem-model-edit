@@ -1,6 +1,7 @@
 set shell := ["bash", "-cu"]
-uv_cache_dir := ".uv-cache"
-uv_tmp_dir := ".uv-tmp"
+# Codexサンドボックスでのrename制限回避のため、書き込み可能な固定パスを使用する
+uv_cache_dir := "/home/grace/.codex/uv-cache"
+uv_tmp_dir := "/home/grace/.codex/uv-tmp"
 web_port := "3001"
 api_port := "8000"
 
