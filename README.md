@@ -87,3 +87,5 @@ uv run mypy .
 ## Specs and samples
 - Spec/Plan/Tasks: `specs/001-chem-model-webapp/`
 - Sample inputs: `samples/qe-in/`
+
+ZPE計算の実装はこちら: [ref-legacy/ZPEGUI9.py](ref-legacy/ZPEGUI9.py)
