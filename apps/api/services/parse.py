@@ -62,6 +62,8 @@ def _lattice_from_vectors(
         b=Vector3(x=float(b[0]), y=float(b[1]), z=float(b[2])),
         c=Vector3(x=float(c[0]), y=float(c[1]), z=float(c[2])),
     )
+
+
 def parse_qe_in(content: str) -> Structure:
     if not _POSITION_ANY.search(content):
         raise ValueError("構造データではありません。")
@@ -72,6 +74,5 @@ def parse_qe_in(content: str) -> Structure:
             return _from_pymatgen(content)
         except Exception as pmg_error:
             raise ValueError(
-                "QE .in のパースに失敗しました: "
-                f"ASE={ase_error}, pymatgen={pmg_error}"
+                f"QE .in のパースに失敗しました: ASE={ase_error}, pymatgen={pmg_error}"
             ) from pmg_error

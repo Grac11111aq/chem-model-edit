@@ -5,7 +5,9 @@ from typing import Iterable, List, Tuple
 from models import Atom, Lattice, Structure, SupercellMeta, Vector3
 
 
-def _shift_atoms(atoms: Iterable[Atom], shift: Tuple[float, float, float]) -> List[Atom]:
+def _shift_atoms(
+    atoms: Iterable[Atom], shift: Tuple[float, float, float]
+) -> List[Atom]:
     dx, dy, dz = shift
     return [
         Atom(
@@ -19,7 +21,7 @@ def _shift_atoms(atoms: Iterable[Atom], shift: Tuple[float, float, float]) -> Li
 
 
 def _parse_sequence(sequence: str) -> List[List[str]]:
-    blocks = [block.strip() for block in sequence.upper().split(',') if block.strip()]
+    blocks = [block.strip() for block in sequence.upper().split(",") if block.strip()]
     return [list(block) for block in blocks]
 
 
@@ -39,7 +41,7 @@ def generate_supercell(
 ) -> tuple[Structure, SupercellMeta]:
     blocks = _parse_sequence(sequence)
     if not blocks:
-        raise ValueError('シーケンスが空です。')
+        raise ValueError("シーケンスが空です。")
 
     na = max((len(block) for block in blocks), default=1)
     nb = len(blocks)
@@ -50,9 +52,9 @@ def generate_supercell(
     for block in blocks:
         a_shift = (0.0, 0.0, 0.0)
         for layer in block:
-            if layer not in {'A', 'B'}:
+            if layer not in {"A", "B"}:
                 raise ValueError(f"未知のシーケンス記号: {layer}")
-            source = structure_a if layer == 'A' else structure_b
+            source = structure_a if layer == "A" else structure_b
             atoms_out.extend(
                 _shift_atoms(
                     source.atoms,

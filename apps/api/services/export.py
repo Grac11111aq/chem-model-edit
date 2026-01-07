@@ -8,9 +8,7 @@ from models import Atom, Structure
 def _atoms_to_qe_positions(atoms: Iterable[Atom]) -> str:
     lines = ["ATOMIC_POSITIONS angstrom"]
     for atom in atoms:
-        lines.append(
-            f"{atom.symbol} {atom.x:.10f} {atom.y:.10f} {atom.z:.10f}"
-        )
+        lines.append(f"{atom.symbol} {atom.x:.10f} {atom.y:.10f} {atom.z:.10f}")
     return "\n".join(lines)
 
 

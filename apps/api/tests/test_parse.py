@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from main import app
@@ -29,32 +30,32 @@ ATOMIC_POSITIONS angstrom
 
 
 def test_parse_qe_ok():
-    response = CLIENT.post('/parse', json={'content': QE_INPUT})
+    response = CLIENT.post("/parse", json={"content": QE_INPUT})
     assert response.status_code == 200
     data = response.json()
-    atoms = data['structure']['atoms']
+    atoms = data["structure"]["atoms"]
     assert len(atoms) == 2
-    assert atoms[0]['symbol'] == 'H'
-    lattice = data['structure'].get('lattice')
+    assert atoms[0]["symbol"] == "H"
+    lattice = data["structure"].get("lattice")
     assert lattice is not None
-    assert lattice['a']['x'] == 5.0
-    assert lattice['b']['y'] == 5.0
-    assert lattice['c']['z'] == 5.0
+    assert lattice["a"]["x"] == 5.0
+    assert lattice["b"]["y"] == 5.0
+    assert lattice["c"]["z"] == 5.0
 
 
 def test_parse_qe_invalid():
-    response = CLIENT.post('/parse', json={'content': 'invalid'})
+    response = CLIENT.post("/parse", json={"content": "invalid"})
     assert response.status_code == 400
 
 
 def test_parse_qe_non_structure_message():
-    response = CLIENT.post('/parse', json={'content': '&INPUTPP\\n/\\n'})
+    response = CLIENT.post("/parse", json={"content": "&INPUTPP\\n/\\n"})
     assert response.status_code == 400
-    detail = response.json().get('detail', '')
-    assert '構造データではありません' in detail
+    detail = response.json().get("detail", "")
+    assert "構造データではありません" in detail
 
 
-def test_parse_qe_manual_fallback(monkeypatch):
+def test_parse_qe_no_manual_fallback(monkeypatch):
     qe_input = """
 &CONTROL
   calculation='scf'
@@ -77,6 +78,10 @@ ATOMIC_POSITIONS angstrom
     monkeypatch.setattr(parse_service, "_from_ase", _raise)
     monkeypatch.setattr(parse_service, "_from_pymatgen", _raise)
 
-    structure = parse_service.parse_qe_in(qe_input)
-    assert len(structure.atoms) == 2
-    assert structure.atoms[0].symbol == 'C'
+    with pytest.raises(ValueError) as excinfo:
+        parse_service.parse_qe_in(qe_input)
+
+    message = str(excinfo.value)
+    assert "QE .in のパースに失敗しました" in message
+    assert "ASE=force fallback" in message
+    assert "pymatgen=force fallback" in message

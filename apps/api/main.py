@@ -110,7 +110,9 @@ def lattice_vectors_to_params(
         params = vectors_to_params(request.lattice)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return LatticeConvertResponse(lattice=request.lattice, params=params, unit=request.unit)
+    return LatticeConvertResponse(
+        lattice=request.lattice, params=params, unit=request.unit
+    )
 
 
 @app.post("/lattice/params-to-vectors", response_model=LatticeConvertResponse)
@@ -121,4 +123,6 @@ def lattice_params_to_vectors(
         lattice = params_to_vectors(request.params)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return LatticeConvertResponse(lattice=lattice, params=request.params, unit=request.unit)
+    return LatticeConvertResponse(
+        lattice=lattice, params=request.params, unit=request.unit
+    )
