@@ -55,7 +55,9 @@ export function StructureSidebar({
               onClick={onToggleOverlay}
               className={cn(
                 'rounded-full border px-3 text-[10px] uppercase tracking-[0.3em]',
-                overlayEnabled ? overlayButtonStyles.on : overlayButtonStyles.off,
+                overlayEnabled
+                  ? overlayButtonStyles.on
+                  : overlayButtonStyles.off,
               )}
             >
               Overlay {overlayEnabled ? 'On' : 'Off'}

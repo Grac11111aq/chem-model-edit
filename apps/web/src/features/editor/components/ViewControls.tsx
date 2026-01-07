@@ -25,13 +25,19 @@ export function ViewControls({
       <CardContent className="space-y-3 text-sm text-white/70">
         <div className="flex items-center justify-between">
           <span>Overlay Mode</span>
-          <Badge variant="outline" className="border-white/10 px-3 py-1 text-xs">
+          <Badge
+            variant="outline"
+            className="border-white/10 px-3 py-1 text-xs"
+          >
             {overlayEnabled ? 'On' : 'Off'}
           </Badge>
         </div>
         <div className="flex items-center justify-between">
           <span>Visible Structures</span>
-          <Badge variant="outline" className="border-white/10 px-3 py-1 text-xs">
+          <Badge
+            variant="outline"
+            className="border-white/10 px-3 py-1 text-xs"
+          >
             {visibleOverlayCount}
           </Badge>
         </div>

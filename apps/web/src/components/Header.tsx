@@ -27,8 +27,7 @@ export default function Header() {
               to="/editor"
               className="rounded-full px-4 py-1.5 transition hover:text-white"
               activeProps={{
-                className:
-                  'rounded-full bg-white/10 px-4 py-1.5 text-white',
+                className: 'rounded-full bg-white/10 px-4 py-1.5 text-white',
               }}
             >
               Editor
@@ -37,8 +36,7 @@ export default function Header() {
               to="/supercell"
               className="rounded-full px-4 py-1.5 transition hover:text-white"
               activeProps={{
-                className:
-                  'rounded-full bg-white/10 px-4 py-1.5 text-white',
+                className: 'rounded-full bg-white/10 px-4 py-1.5 text-white',
               }}
             >
               Supercell
@@ -47,8 +45,7 @@ export default function Header() {
               to="/transplant"
               className="rounded-full px-4 py-1.5 transition hover:text-white"
               activeProps={{
-                className:
-                  'rounded-full bg-white/10 px-4 py-1.5 text-white',
+                className: 'rounded-full bg-white/10 px-4 py-1.5 text-white',
               }}
             >
               Transplant

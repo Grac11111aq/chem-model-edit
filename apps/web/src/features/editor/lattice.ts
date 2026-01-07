@@ -23,11 +23,7 @@ export const maxAbsDifference = (a: Matrix3, b: Matrix3) => {
 }
 
 export const invert3 = (m: Matrix3): Matrix3 | null => {
-  const [
-    [a00, a01, a02],
-    [a10, a11, a12],
-    [a20, a21, a22],
-  ] = m
+  const [[a00, a01, a02], [a10, a11, a12], [a20, a21, a22]] = m
   const b01 = a22 * a11 - a12 * a21
   const b11 = -a22 * a10 + a12 * a20
   const b21 = a21 * a10 - a11 * a20

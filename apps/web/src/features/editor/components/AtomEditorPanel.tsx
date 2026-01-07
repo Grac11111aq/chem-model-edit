@@ -172,9 +172,7 @@ export function AtomEditorPanel({
                             aria-label={`select atom ${index + 1}`}
                           />
                         </td>
-                        <td className="px-3 py-2 text-white/40">
-                          {index + 1}
-                        </td>
+                        <td className="px-3 py-2 text-white/40">{index + 1}</td>
                         <td className="px-3 py-2">
                           <Input
                             value={draft.symbol}

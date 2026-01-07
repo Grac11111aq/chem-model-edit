@@ -43,7 +43,9 @@ export function SelectionTools({
               <Input
                 key={axis}
                 value={shiftDraft[axis]}
-                onChange={(event) => onShiftDraftChange(axis, event.target.value)}
+                onChange={(event) =>
+                  onShiftDraftChange(axis, event.target.value)
+                }
                 className="h-9 border-white/10 bg-white/5 text-white/70 focus-visible:ring-amber-300"
                 placeholder={`d${axis}`}
               />

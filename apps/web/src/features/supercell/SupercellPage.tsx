@@ -154,7 +154,10 @@ export default function SupercellPage() {
       return
     }
     const width = patternGrid[0].length
-    updatePatternGrid([...patternGrid, Array.from({ length: width }, () => 'A')])
+    updatePatternGrid([
+      ...patternGrid,
+      Array.from({ length: width }, () => 'A'),
+    ])
   }
 
   const handleAddColumn = () => {
@@ -185,9 +188,21 @@ export default function SupercellPage() {
       gamma: prev.gamma,
     }))
     setVectorsDraft((prev) => ({
-      a: { x: scaleValue(prev.a.x), y: scaleValue(prev.a.y), z: scaleValue(prev.a.z) },
-      b: { x: scaleValue(prev.b.x), y: scaleValue(prev.b.y), z: scaleValue(prev.b.z) },
-      c: { x: scaleValue(prev.c.x), y: scaleValue(prev.c.y), z: scaleValue(prev.c.z) },
+      a: {
+        x: scaleValue(prev.a.x),
+        y: scaleValue(prev.a.y),
+        z: scaleValue(prev.a.z),
+      },
+      b: {
+        x: scaleValue(prev.b.x),
+        y: scaleValue(prev.b.y),
+        z: scaleValue(prev.b.z),
+      },
+      c: {
+        x: scaleValue(prev.c.x),
+        y: scaleValue(prev.c.y),
+        z: scaleValue(prev.c.z),
+      },
     }))
     setUnit(nextUnit)
   }
@@ -209,7 +224,10 @@ export default function SupercellPage() {
         throw new Error('タイルパターンが空です。')
       }
       const tolerance = overlapCheck ? Number(overlapTolerance) : undefined
-      if (overlapCheck && (tolerance === undefined || Number.isNaN(tolerance))) {
+      if (
+        overlapCheck &&
+        (tolerance === undefined || Number.isNaN(tolerance))
+      ) {
         throw new Error('重複チェックの許容誤差が無効です。')
       }
       const result = await generateTiledSupercell({
@@ -239,9 +257,7 @@ export default function SupercellPage() {
     const b = parseVector(draft.b)
     const c = parseVector(draft.c)
     if (
-      [a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z].some((v) =>
-        Number.isNaN(v),
-      )
+      [a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z].some((v) => Number.isNaN(v))
     ) {
       throw new Error('格子ベクトルの数値が無効です。')
     }
@@ -267,7 +283,10 @@ export default function SupercellPage() {
     setConverterError(null)
     try {
       const latticeVectors = parseLatticeDraft(vectorsDraft)
-      const result = await latticeVectorsToParams({ lattice: latticeVectors, unit })
+      const result = await latticeVectorsToParams({
+        lattice: latticeVectors,
+        unit,
+      })
       setParamsDraft({
         a: result.params.a.toFixed(6),
         b: result.params.b.toFixed(6),
@@ -277,7 +296,9 @@ export default function SupercellPage() {
         gamma: result.params.gamma.toFixed(4),
       })
     } catch (err) {
-      setConverterError(err instanceof Error ? err.message : '変換に失敗しました。')
+      setConverterError(
+        err instanceof Error ? err.message : '変換に失敗しました。',
+      )
     }
   }
 
@@ -304,7 +325,9 @@ export default function SupercellPage() {
         },
       })
     } catch (err) {
-      setConverterError(err instanceof Error ? err.message : '変換に失敗しました。')
+      setConverterError(
+        err instanceof Error ? err.message : '変換に失敗しました。',
+      )
     }
   }
 
@@ -316,7 +339,9 @@ export default function SupercellPage() {
             <p className="text-xs uppercase tracking-[0.3em] text-white/50">
               Supercell Builder
             </p>
-            <h1 className="mt-2 text-3xl font-semibold">Stack slabs with intent</h1>
+            <h1 className="mt-2 text-3xl font-semibold">
+              Stack slabs with intent
+            </h1>
             <p className="mt-2 text-white/60">
               Define lattice vectors and tile patterns to generate a composite
               supercell preview.
@@ -337,7 +362,9 @@ export default function SupercellPage() {
             <Card className="border-white/10 bg-white/5 p-6">
               <div className="flex items-center gap-3 text-white/70">
                 <Grid3X3 className="h-5 w-5" />
-                <span className="text-sm uppercase tracking-[0.3em]">Lattice</span>
+                <span className="text-sm uppercase tracking-[0.3em]">
+                  Lattice
+                </span>
               </div>
               <div className="mt-6 grid grid-cols-3 gap-3 text-sm">
                 {(['a', 'b', 'c'] as const).map((axis) => (
@@ -373,7 +400,9 @@ export default function SupercellPage() {
                 </p>
                 <Textarea
                   value={patternText}
-                  onChange={(event) => handlePatternTextChange(event.target.value)}
+                  onChange={(event) =>
+                    handlePatternTextChange(event.target.value)
+                  }
                   className="mt-3 h-20 resize-none border-white/10 bg-slate-950/70 font-mono text-xs text-white/80 focus-visible:ring-amber-300"
                   aria-label="Tile pattern"
                 />
@@ -431,14 +460,18 @@ export default function SupercellPage() {
                   <label className="flex items-center gap-2">
                     <Checkbox
                       checked={overlapCheck}
-                      onCheckedChange={(checked) => setOverlapCheck(Boolean(checked))}
+                      onCheckedChange={(checked) =>
+                        setOverlapCheck(Boolean(checked))
+                      }
                       className="border-white/20 data-[state=checked]:bg-amber-300 data-[state=checked]:text-slate-900"
                     />
                     Overlap Check
                   </label>
                   <Input
                     value={overlapTolerance}
-                    onChange={(event) => setOverlapTolerance(event.target.value)}
+                    onChange={(event) =>
+                      setOverlapTolerance(event.target.value)
+                    }
                     className="h-8 w-20 border-white/10 bg-slate-950/70 text-xs text-white/80 focus-visible:ring-amber-300"
                     placeholder="tol"
                     disabled={!overlapCheck}
@@ -469,7 +502,9 @@ export default function SupercellPage() {
                   />
                 </div>
               </div>
-              {error ? <p className="mt-4 text-xs text-rose-300">{error}</p> : null}
+              {error ? (
+                <p className="mt-4 text-xs text-rose-300">{error}</p>
+              ) : null}
             </Card>
           </div>
 
@@ -477,7 +512,9 @@ export default function SupercellPage() {
             <Card className="border-white/10 bg-white/5 p-6">
               <div className="flex items-center gap-3 text-white/70">
                 <Boxes className="h-5 w-5" />
-                <span className="text-sm uppercase tracking-[0.3em]">Output</span>
+                <span className="text-sm uppercase tracking-[0.3em]">
+                  Output
+                </span>
               </div>
               <div className="mt-6 space-y-3 text-sm text-white/70">
                 <div className="flex items-center justify-between">
@@ -508,14 +545,23 @@ export default function SupercellPage() {
             </Card>
             <Card className="flex flex-1 flex-col border-white/10 bg-white/5 p-6">
               <div className="flex items-center justify-between text-white/60">
-                <span className="text-xs uppercase tracking-[0.3em]">Viewer</span>
+                <span className="text-xs uppercase tracking-[0.3em]">
+                  Viewer
+                </span>
                 <Layers className="h-4 w-4" />
               </div>
               <div className="mt-4 min-h-[240px] flex-1">
                 <MolstarViewer
                   structures={
                     atoms.length
-                      ? [{ id: 'supercell', pdbText: pdb, opacity: 1, visible: true }]
+                      ? [
+                          {
+                            id: 'supercell',
+                            pdbText: pdb,
+                            opacity: 1,
+                            visible: true,
+                          },
+                        ]
                       : []
                   }
                 />
@@ -530,9 +576,14 @@ export default function SupercellPage() {
               <p className="text-xs uppercase tracking-[0.3em] text-white/50">
                 Lattice Converter
               </p>
-              <p className="mt-2 text-lg font-semibold">a,b,c & angles ⇄ vectors</p>
+              <p className="mt-2 text-lg font-semibold">
+                a,b,c & angles ⇄ vectors
+              </p>
             </div>
-            <Select value={unit} onValueChange={(value) => handleUnitChange(value as typeof unit)}>
+            <Select
+              value={unit}
+              onValueChange={(value) => handleUnitChange(value as typeof unit)}
+            >
               <SelectTrigger className="w-[140px] border-white/10 bg-slate-950/70 text-xs text-white/80">
                 <SelectValue placeholder="Unit" />
               </SelectTrigger>
@@ -559,7 +610,10 @@ export default function SupercellPage() {
                     key={`param-${key}`}
                     value={paramsDraft[key]}
                     onChange={(event) =>
-                      setParamsDraft((prev) => ({ ...prev, [key]: event.target.value }))
+                      setParamsDraft((prev) => ({
+                        ...prev,
+                        [key]: event.target.value,
+                      }))
                     }
                     className="h-8 border-white/10 bg-slate-950/70 text-white/80 focus-visible:ring-amber-300"
                   />
@@ -569,7 +623,10 @@ export default function SupercellPage() {
                     key={`param-${key}`}
                     value={paramsDraft[key]}
                     onChange={(event) =>
-                      setParamsDraft((prev) => ({ ...prev, [key]: event.target.value }))
+                      setParamsDraft((prev) => ({
+                        ...prev,
+                        [key]: event.target.value,
+                      }))
                     }
                     className="h-8 border-white/10 bg-slate-950/70 text-white/80 focus-visible:ring-amber-300"
                   />

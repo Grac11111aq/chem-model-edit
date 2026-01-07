@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-
-
 import { AtomEditorPanel } from './components/AtomEditorPanel'
 import { ComparePanel } from './components/ComparePanel'
 import { ExportSettings } from './components/ExportSettings'
@@ -162,7 +160,8 @@ export default function EditorPage() {
   )
 
   const compareTarget = useMemo(
-    () => structures.find((structure) => structure.id === compareTargetId) ?? null,
+    () =>
+      structures.find((structure) => structure.id === compareTargetId) ?? null,
     [compareTargetId, structures],
   )
 
@@ -207,7 +206,11 @@ export default function EditorPage() {
   )
 
   const distanceRows = useMemo(() => {
-    if (!compareTarget || atoms.length === 0 || compareTarget.atoms.length === 0) {
+    if (
+      !compareTarget ||
+      atoms.length === 0 ||
+      compareTarget.atoms.length === 0
+    ) {
       return []
     }
     const limit = Math.min(atoms.length, compareTarget.atoms.length)
@@ -246,7 +249,9 @@ export default function EditorPage() {
     return Math.sqrt(dx * dx + dy * dy + dz * dz)
   }, [selectedAtoms])
 
-  const updateActive = (updater: (structure: StructureState) => StructureState) => {
+  const updateActive = (
+    updater: (structure: StructureState) => StructureState,
+  ) => {
     setStructures((prev) =>
       prev.map((structure) =>
         structure.id === activeId ? updater(structure) : structure,
@@ -259,7 +264,9 @@ export default function EditorPage() {
     updater: (structure: StructureState) => StructureState,
   ) => {
     setStructures((prev) =>
-      prev.map((structure) => (structure.id === id ? updater(structure) : structure)),
+      prev.map((structure) =>
+        structure.id === id ? updater(structure) : structure,
+      ),
     )
   }
 
@@ -305,7 +312,9 @@ export default function EditorPage() {
       setExported(content)
       await navigator.clipboard.writeText(content)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'エクスポートに失敗しました。')
+      setError(
+        err instanceof Error ? err.message : 'エクスポートに失敗しました。',
+      )
     }
   }
 
@@ -384,7 +393,9 @@ export default function EditorPage() {
 
   const toggleSelect = (index: number) => {
     setSelectedIndices((prev) =>
-      prev.includes(index) ? prev.filter((item) => item !== index) : [...prev, index],
+      prev.includes(index)
+        ? prev.filter((item) => item !== index)
+        : [...prev, index],
     )
   }
 
@@ -435,7 +446,11 @@ export default function EditorPage() {
       return
     }
     setError(null)
-    const nextAtoms = shiftAtoms(atoms, selectedIndices, { x: dx, y: dy, z: dz })
+    const nextAtoms = shiftAtoms(atoms, selectedIndices, {
+      x: dx,
+      y: dy,
+      z: dz,
+    })
     syncDrafts(nextAtoms)
     updateActive((structure) => ({ ...structure, atoms: nextAtoms }))
   }
@@ -475,7 +490,9 @@ export default function EditorPage() {
       setError('転写する原子を選択してください。')
       return
     }
-    const invalid = selectedIndices.filter((index) => index >= compareTarget.atoms.length)
+    const invalid = selectedIndices.filter(
+      (index) => index >= compareTarget.atoms.length,
+    )
     if (invalid.length > 0) {
       setError('転写先の原子数が不足しています。')
       return
@@ -525,7 +542,9 @@ export default function EditorPage() {
     })
   }
 
-  const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportFile = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = event.target.files?.[0]
     if (!file) {
       return
@@ -546,7 +565,11 @@ export default function EditorPage() {
       setQeInput(text)
       await parseContent(text)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'クリップボード読取に失敗しました。')
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'クリップボード読取に失敗しました。',
+      )
     }
   }
 
@@ -562,7 +585,10 @@ export default function EditorPage() {
       return
     }
     setCompareTargetId((prev) => {
-      if (prev && compareCandidates.some((candidate) => candidate.id === prev)) {
+      if (
+        prev &&
+        compareCandidates.some((candidate) => candidate.id === prev)
+      ) {
         return prev
       }
       return compareCandidates[0].id

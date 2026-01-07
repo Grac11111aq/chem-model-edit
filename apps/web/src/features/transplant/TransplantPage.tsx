@@ -47,12 +47,20 @@ export default function TransplantPage() {
       setError(null)
       updateInput(key, text)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'クリップボード読取に失敗しました。')
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'クリップボード読取に失敗しました。',
+      )
     }
   }
 
   const handleRun = async () => {
-    if (!inputs.smallIn.trim() || !inputs.smallOut.trim() || !inputs.largeIn.trim()) {
+    if (
+      !inputs.smallIn.trim() ||
+      !inputs.smallOut.trim() ||
+      !inputs.largeIn.trim()
+    ) {
       setError('small .in / small .out / large .in の3つを入力してください。')
       return
     }
@@ -115,7 +123,9 @@ export default function TransplantPage() {
                   <p className="text-xs uppercase tracking-[0.3em] text-white/50">
                     Delta Transplant
                   </p>
-                  <p className="text-lg font-semibold">小スラブの緩和変位を大スラブへ</p>
+                  <p className="text-lg font-semibold">
+                    小スラブの緩和変位を大スラブへ
+                  </p>
                 </div>
                 <Button
                   className="rounded-full bg-emerald-300 text-xs font-semibold text-slate-900 hover:bg-emerald-200"
@@ -127,7 +137,9 @@ export default function TransplantPage() {
                 </Button>
               </div>
               <div className="mt-4 rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-xs text-white/60">
-                <p className="uppercase tracking-[0.3em] text-white/40">Notes</p>
+                <p className="uppercase tracking-[0.3em] text-white/40">
+                  Notes
+                </p>
                 <ul className="mt-2 space-y-1">
                   <li>ATOMIC_POSITIONS の 0/1 フラグ必須</li>
                   <li>非直交セルは未対応（wrap は Lx/Ly のみ）</li>
@@ -161,7 +173,9 @@ export default function TransplantPage() {
                 </div>
                 <Textarea
                   value={inputs.smallIn}
-                  onChange={(event) => updateInput('smallIn', event.target.value)}
+                  onChange={(event) =>
+                    updateInput('smallIn', event.target.value)
+                  }
                   className="mt-3 h-64 resize-none border-white/10 bg-slate-950/80 font-mono text-xs text-white/80 focus-visible:ring-emerald-300"
                   placeholder="小スラブ input (.in)"
                 />
@@ -198,7 +212,9 @@ export default function TransplantPage() {
                 </div>
                 <Textarea
                   value={inputs.smallOut}
-                  onChange={(event) => updateInput('smallOut', event.target.value)}
+                  onChange={(event) =>
+                    updateInput('smallOut', event.target.value)
+                  }
                   className="mt-3 h-64 resize-none border-white/10 bg-slate-950/80 font-mono text-xs text-white/80 focus-visible:ring-emerald-300"
                   placeholder="小スラブ output (.out)"
                 />
@@ -235,7 +251,9 @@ export default function TransplantPage() {
                 </div>
                 <Textarea
                   value={inputs.largeIn}
-                  onChange={(event) => updateInput('largeIn', event.target.value)}
+                  onChange={(event) =>
+                    updateInput('largeIn', event.target.value)
+                  }
                   className="mt-3 h-64 resize-none border-white/10 bg-slate-950/80 font-mono text-xs text-white/80 focus-visible:ring-emerald-300"
                   placeholder="大スラブ input (.in)"
                 />
