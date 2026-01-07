@@ -116,3 +116,4 @@
 - [x] T052 [P] ドキュメント更新（`specs/001-chem-model-webapp/quickstart.md`）
 - [x] T053 [P] 開発補助: Justfile で Web/API 同時起動を追加（`Justfile`）
 - [x] T054 [US1] .in パースの手動フォールバック追加（`apps/api/services/parse.py`）
+- [x] T055 [P] フロント: 機能単位の分割と Shadcn/ui への移行（`apps/web/src/features/*`, `apps/web/src/components/ui/*`）

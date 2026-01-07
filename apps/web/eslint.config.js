@@ -3,6 +3,9 @@
 import { tanstackConfig } from '@tanstack/eslint-config'
 
 export default [
+  {
+    ignores: ['.output/**', 'dist/**', '.tanstack/**', '.vinxi/**'],
+  },
   ...tanstackConfig,
   {
     files: ['**/*.{ts,tsx,js,jsx}'],

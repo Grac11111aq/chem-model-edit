@@ -2,6 +2,8 @@ import { Link } from '@tanstack/react-router'
 
 import { Activity, Database, Share2, Upload } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
+
 export default function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/80 text-white backdrop-blur">
@@ -25,8 +27,7 @@ export default function Header() {
               to="/editor"
               className="rounded-full px-4 py-1.5 transition hover:text-white"
               activeProps={{
-                className:
-                  'rounded-full bg-white/10 px-4 py-1.5 text-white',
+                className: 'rounded-full bg-white/10 px-4 py-1.5 text-white',
               }}
             >
               Editor
@@ -35,8 +36,7 @@ export default function Header() {
               to="/supercell"
               className="rounded-full px-4 py-1.5 transition hover:text-white"
               activeProps={{
-                className:
-                  'rounded-full bg-white/10 px-4 py-1.5 text-white',
+                className: 'rounded-full bg-white/10 px-4 py-1.5 text-white',
               }}
             >
               Supercell
@@ -45,8 +45,7 @@ export default function Header() {
               to="/transplant"
               className="rounded-full px-4 py-1.5 transition hover:text-white"
               activeProps={{
-                className:
-                  'rounded-full bg-white/10 px-4 py-1.5 text-white',
+                className: 'rounded-full bg-white/10 px-4 py-1.5 text-white',
               }}
             >
               Transplant
@@ -54,23 +53,27 @@ export default function Header() {
           </nav>
         </div>
         <div className="flex items-center gap-2 text-sm">
-          <button
-            className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-white/80 transition hover:bg-white/10"
+          <Button
+            variant="outline"
+            className="rounded-full border-white/15 bg-white/5 text-white/80 hover:bg-white/10"
             onClick={() =>
               window.dispatchEvent(new CustomEvent('chem-model-import'))
             }
           >
             <Upload className="h-4 w-4" />
             Import
-          </button>
-          <button className="hidden items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-white/80 transition hover:bg-white/10 sm:flex">
+          </Button>
+          <Button
+            variant="outline"
+            className="hidden rounded-full border-white/15 bg-white/5 text-white/80 hover:bg-white/10 sm:flex"
+          >
             <Database className="h-4 w-4" />
             Export
-          </button>
-          <button className="flex items-center gap-2 rounded-full bg-amber-300 px-4 py-2 font-medium text-slate-900 shadow-lg shadow-amber-400/30 transition hover:bg-amber-200">
+          </Button>
+          <Button className="rounded-full bg-amber-300 font-medium text-slate-900 shadow-lg shadow-amber-400/30 hover:bg-amber-200">
             <Share2 className="h-4 w-4" />
             Share
-          </button>
+          </Button>
         </div>
       </div>
     </header>

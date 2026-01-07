@@ -11,7 +11,12 @@ export function shiftAtoms(
   const set = new Set(indices)
   return atoms.map((atom, index) =>
     set.has(index)
-      ? { ...atom, x: atom.x + delta.x, y: atom.y + delta.y, z: atom.z + delta.z }
+      ? {
+          ...atom,
+          x: atom.x + delta.x,
+          y: atom.y + delta.y,
+          z: atom.z + delta.z,
+        }
       : atom,
   )
 }

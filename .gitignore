@@ -18,6 +18,7 @@ __pycache__
 
 # Logs
 pnpm-debug.log*
+.pnpm-store
 
 # Local runtime dirs
 .xdg-runtime

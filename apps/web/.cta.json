@@ -8,11 +8,5 @@
   "addOnOptions": {},
   "version": 1,
   "framework": "react-cra",
-  "chosenAddOns": [
-    "start",
-    "shadcn",
-    "table",
-    "eslint",
-    "nitro"
-  ]
+  "chosenAddOns": ["start", "shadcn", "table", "eslint", "nitro"]
 }

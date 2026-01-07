@@ -1,10 +1,25 @@
+import { Suspense, lazy } from 'react'
 import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
-import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
-import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import Header from '../components/Header'
 
 import appCss from '../styles.css?url'
+
+const RouterDevtoolsPanel = import.meta.env.DEV
+  ? lazy(() =>
+      import('@tanstack/react-router-devtools').then((module) => ({
+        default: module.TanStackRouterDevtoolsPanel,
+      })),
+    )
+  : null
+
+const Devtools = import.meta.env.DEV
+  ? lazy(() =>
+      import('@tanstack/react-devtools').then((module) => ({
+        default: module.TanStackDevtools,
+      })),
+    )
+  : null
 
 export const Route = createRootRoute({
   head: () => ({
@@ -40,17 +55,21 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body>
         <Header />
         {children}
-        <TanStackDevtools
-          config={{
-            position: 'bottom-right',
-          }}
-          plugins={[
-            {
-              name: 'Tanstack Router',
-              render: <TanStackRouterDevtoolsPanel />,
-            },
-          ]}
-        />
+        {Devtools && RouterDevtoolsPanel ? (
+          <Suspense fallback={null}>
+            <Devtools
+              config={{
+                position: 'bottom-right',
+              }}
+              plugins={[
+                {
+                  name: 'Tanstack Router',
+                  render: <RouterDevtoolsPanel />,
+                },
+              ]}
+            />
+          </Suspense>
+        ) : null}
         <Scripts />
       </body>
     </html>

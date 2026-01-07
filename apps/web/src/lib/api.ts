@@ -99,9 +99,11 @@ export async function latticeVectorsToParams(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return handleResponse<{ lattice: Lattice; params: LatticeParams; unit: string }>(
-    response,
-  )
+  return handleResponse<{
+    lattice: Lattice
+    params: LatticeParams
+    unit: string
+  }>(response)
 }
 
 export async function latticeParamsToVectors(params: {
@@ -113,7 +115,9 @@ export async function latticeParamsToVectors(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return handleResponse<{ lattice: Lattice; params: LatticeParams; unit: string }>(
-    response,
-  )
+  return handleResponse<{
+    lattice: Lattice
+    params: LatticeParams
+    unit: string
+  }>(response)
 }
