@@ -8,8 +8,8 @@ from typing import Dict, List, Optional
 import numpy as np
 
 
-def sanitize_vib_cache(name: str, natoms: Optional[int] = None) -> Dict[str, object]:
-    roots_relaxed = [Path(name)]
+def sanitize_vib_cache(job_dir: Path, name: str, natoms: Optional[int] = None) -> Dict[str, object]:
+    roots_relaxed = [job_dir / name]
 
     deleted = 0
     checked = 0
@@ -43,7 +43,7 @@ def sanitize_vib_cache(name: str, natoms: Optional[int] = None) -> Dict[str, obj
             except Exception:
                 pass
 
-    for root in (Path("."), Path("vib_ads_vac")):
+    for root in (job_dir, job_dir / "vib_ads_vac"):
         eq_json = root / f"{name}.eq" / "cache.eq.json"
         if eq_json.exists():
             check_and_maybe_delete(eq_json, strict=True)
@@ -57,7 +57,7 @@ def sanitize_vib_cache(name: str, natoms: Optional[int] = None) -> Dict[str, obj
             for jf in base.rglob("cache*.json"):
                 check_and_maybe_delete(jf, strict=False)
 
-    for base in (Path("vib_ads_vac") / name,):
+    for base in (job_dir / "vib_ads_vac" / name,):
         if base.exists() and base.is_dir():
             for jf in base.rglob("cache*.json"):
                 check_and_maybe_delete(jf, strict=True)
