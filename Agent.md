@@ -58,6 +58,9 @@
 - Codexサンドボックス（workspace-write）では `uv sync` が rename 制限で失敗するため、uv 実行時は昇格（on-request）か danger-full-access が必要
 
 ## ブランチ運用
+- トランクは `main` とし、作業ブランチは必ず `main` から **短命で** 切る
+- 作業ブランチごとに `git worktree` を作成し、並行作業を分離する
+- `dev` のような長命ブランチは持たない（必要なら一時的な検証用途に限定）
 - 基本は短期ブランチ → PR → **merge commit** で `main` に統合（squash/rebase は使わない）
 - `main` への直接pushは禁止（PR経由で統合）
 - レビューは必須ではない（自己マージ可）
