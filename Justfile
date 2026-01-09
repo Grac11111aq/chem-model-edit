@@ -119,3 +119,72 @@ dev:
   popd >/dev/null
   pnpm -C apps/web dev --port "$web_port" &
   wait
+
+api-test:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  pushd apps/api >/dev/null
+  if [[ -z "${UV_CACHE_DIR:-}" ]]; then
+    cache_dir="$(python ../../scripts/uv_pick_cache.py "{{uv_cache_dir}}" "$HOME/.cache/uv" "/tmp/uv-cache")" || {
+      echo "UV cache でクロスディレクトリrenameが失敗します。Linux ext4上のパスをUV_CACHE_DIRで指定してください。" >&2
+      exit 1
+    }
+  else
+    cache_dir="$UV_CACHE_DIR"
+  fi
+  tmp_dir="${TMPDIR:-$cache_dir/tmp}"
+  mkdir -p "$cache_dir" "$tmp_dir"
+  link_mode="${UV_LINK_MODE:-copy}"
+  uv_flags=()
+  if [[ "${UV_NO_CACHE:-}" == "1" ]]; then
+    uv_flags+=(--no-cache)
+  fi
+  TMPDIR="$tmp_dir" UV_CACHE_DIR="$cache_dir" UV_LINK_MODE="$link_mode" uv sync "${uv_flags[@]}"
+  TMPDIR="$tmp_dir" UV_CACHE_DIR="$cache_dir" UV_LINK_MODE="$link_mode" uv run "${uv_flags[@]}" pytest
+  popd >/dev/null
+
+api-ruff:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  pushd apps/api >/dev/null
+  if [[ -z "${UV_CACHE_DIR:-}" ]]; then
+    cache_dir="$(python ../../scripts/uv_pick_cache.py "{{uv_cache_dir}}" "$HOME/.cache/uv" "/tmp/uv-cache")" || {
+      echo "UV cache でクロスディレクトリrenameが失敗します。Linux ext4上のパスをUV_CACHE_DIRで指定してください。" >&2
+      exit 1
+    }
+  else
+    cache_dir="$UV_CACHE_DIR"
+  fi
+  tmp_dir="${TMPDIR:-$cache_dir/tmp}"
+  mkdir -p "$cache_dir" "$tmp_dir"
+  link_mode="${UV_LINK_MODE:-copy}"
+  uv_flags=()
+  if [[ "${UV_NO_CACHE:-}" == "1" ]]; then
+    uv_flags+=(--no-cache)
+  fi
+  TMPDIR="$tmp_dir" UV_CACHE_DIR="$cache_dir" UV_LINK_MODE="$link_mode" uv sync "${uv_flags[@]}"
+  TMPDIR="$tmp_dir" UV_CACHE_DIR="$cache_dir" UV_LINK_MODE="$link_mode" uv run "${uv_flags[@]}" ruff check .
+  popd >/dev/null
+
+api-mypy:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  pushd apps/api >/dev/null
+  if [[ -z "${UV_CACHE_DIR:-}" ]]; then
+    cache_dir="$(python ../../scripts/uv_pick_cache.py "{{uv_cache_dir}}" "$HOME/.cache/uv" "/tmp/uv-cache")" || {
+      echo "UV cache でクロスディレクトリrenameが失敗します。Linux ext4上のパスをUV_CACHE_DIRで指定してください。" >&2
+      exit 1
+    }
+  else
+    cache_dir="$UV_CACHE_DIR"
+  fi
+  tmp_dir="${TMPDIR:-$cache_dir/tmp}"
+  mkdir -p "$cache_dir" "$tmp_dir"
+  link_mode="${UV_LINK_MODE:-copy}"
+  uv_flags=()
+  if [[ "${UV_NO_CACHE:-}" == "1" ]]; then
+    uv_flags+=(--no-cache)
+  fi
+  TMPDIR="$tmp_dir" UV_CACHE_DIR="$cache_dir" UV_LINK_MODE="$link_mode" uv sync "${uv_flags[@]}"
+  TMPDIR="$tmp_dir" UV_CACHE_DIR="$cache_dir" UV_LINK_MODE="$link_mode" uv run "${uv_flags[@]}" mypy .
+  popd >/dev/null
