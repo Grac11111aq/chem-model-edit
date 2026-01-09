@@ -6,11 +6,13 @@ import math
 import re
 from typing import Any, Callable, List, Tuple
 
-ase_read: Callable[..., Any] | None
+_ase_read: Callable[..., Any] | None
 try:
-    from ase.io import read as ase_read
+    from ase.io import read as _ase_read
 except Exception:
-    ase_read = None
+    _ase_read = None
+
+ase_read: Callable[..., Any] | None = _ase_read
 
 
 @dataclass
