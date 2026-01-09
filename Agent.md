@@ -53,6 +53,7 @@
 - Import/Exportの入出力は`.in` (QE) と座標/原子種に限定
 - `apps/web/src/components/molstar/MolstarViewer.tsx` が表示の中心
 - pnpmストアは `/home/grace/projects/chem-model-edit/.pnpm-store` を共通利用する方針（`.pnpm-store` はgit ignore）
+- Codexサンドボックス（workspace-write）では `uv sync` が rename 制限で失敗するため、uv 実行時は昇格（on-request）か danger-full-access が必要
 
 ## 進め方のベストプラクティス
 - 変更前に影響範囲と対象ファイルを明確化
