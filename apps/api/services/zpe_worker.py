@@ -145,7 +145,7 @@ def run_zpe_job(payload: Dict[str, Any]) -> Dict[str, object]:
 
     start_time = datetime.now()
     with _pushd(job_dir):
-        cleaned = sanitize_vib_cache(settings.vib_name, natoms=len(atoms))
+        cleaned = sanitize_vib_cache(job_dir, settings.vib_name, natoms=len(atoms))
 
         atoms.calc = Espresso(
             pseudopotentials=pseudos,
