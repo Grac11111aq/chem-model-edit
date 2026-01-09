@@ -7,12 +7,16 @@ requires-python = ">=3.13"
 dependencies = [
     "ase>=3.27.0",
     "fastapi>=0.128.0",
+    "pydantic-settings>=2.8.0",
     "pymatgen>=2025.10.7",
+    "redis>=5.0.8",
+    "rq>=1.16.2",
     "uvicorn[standard]>=0.40.0",
 ]
 
 [dependency-groups]
 dev = [
+    "fakeredis>=2.29.0",
     "httpx>=0.28.1",
     "mypy>=1.19.1",
     "pytest>=9.0.2",
