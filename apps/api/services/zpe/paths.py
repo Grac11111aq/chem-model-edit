@@ -33,6 +33,10 @@ def resolve_pseudo_dir(
 def resolve_work_dir(settings: Optional[ZPESettings] = None) -> Path:
     settings = settings or get_zpe_settings()
     base = Path(settings.work_dir).expanduser()
+    if not base.is_absolute():
+        base = (Path.cwd() / base).resolve()
+    else:
+        base = base.resolve()
     base.mkdir(parents=True, exist_ok=True)
     return base
 
@@ -50,7 +54,11 @@ def resolve_job_file(job: Job, kind: str) -> Path:
     if not path_value:
         raise ValueError("結果ファイルがまだ準備できていません。")
     path = Path(str(path_value)).resolve()
-    work_dir = resolve_work_dir().resolve()
+    work_dir_value = job.meta.get("work_dir")
+    if work_dir_value:
+        work_dir = Path(str(work_dir_value)).expanduser().resolve()
+    else:
+        work_dir = resolve_work_dir().resolve()
     if not path.exists():
         raise ValueError("結果ファイルが見つかりません。")
     if not path.is_relative_to(work_dir):

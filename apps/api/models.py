@@ -108,3 +108,61 @@ class SupercellMeta(BaseModel):
 class SupercellResponse(BaseModel):
     structure: Structure
     meta: SupercellMeta
+
+
+class ZPEParseRequest(BaseModel):
+    content: str
+
+
+class ZPEParseResponse(BaseModel):
+    structure: Structure
+    fixed_indices: List[int]
+
+
+class ZPEJobRequest(BaseModel):
+    content: str
+    mobile_indices: List[int]
+    use_environ: bool = False
+    new_calc: bool = False
+    input_dir: Optional[str] = None
+    temperature: Optional[float] = None
+    low_cut_cm: Optional[float] = None
+
+
+class ZPEJobResponse(BaseModel):
+    job_id: str
+
+
+class ZPEJobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    enqueued_at: Optional[str] = None
+    started_at: Optional[str] = None
+    ended_at: Optional[str] = None
+    error: Optional[str] = None
+
+
+class ZPEJobResult(BaseModel):
+    frequencies_cm: List[float]
+    zpe_ev: float
+    s_vib_jmol_k: float
+    low_cut_cm: float
+    temperature: float
+    delta: float
+    kpts: List[int]
+    ecutwfc: Optional[float] = None
+    ecutrho: Optional[float] = None
+    mobile_indices: List[int]
+    fixed_indices: List[int]
+    use_environ: bool
+    calculation_mode: str
+    calc_start_time: str
+    calc_end_time: str
+    elapsed_seconds: float
+    cache_checked: int
+    cache_deleted: int
+
+
+class ZPEJobResultResponse(BaseModel):
+    job_id: str
+    result: ZPEJobResult

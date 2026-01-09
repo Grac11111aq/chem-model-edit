@@ -1,6 +1,6 @@
 set shell := ["bash", "-cu"]
-uv_cache_dir := ".uv-cache"
-uv_tmp_dir := ".uv-tmp"
+uv_cache_dir := env_var_or_default("UV_CACHE_DIR", ".uv-cache")
+uv_tmp_dir := env_var_or_default("UV_TMP_DIR", ".uv-tmp")
 web_port := "3001"
 api_port := "8000"
 
