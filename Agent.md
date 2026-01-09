@@ -55,6 +55,14 @@
 - pnpmストアは `/home/grace/projects/chem-model-edit/.pnpm-store` を共通利用する方針（`.pnpm-store` はgit ignore）
 - Codexサンドボックス（workspace-write）では `uv sync` が rename 制限で失敗するため、uv 実行時は昇格（on-request）か danger-full-access が必要
 
+## ブランチ運用
+- 基本は短期ブランチ → PR → **merge commit** で `main` に統合（squash/rebase は使わない）
+- `main` への直接pushは禁止（PR経由で統合）
+- レビューは必須ではない（自己マージ可）
+- CIチェックは必須ではない（任意）
+- 命名規約: `feat/`, `fix/`, `refactor/`, `chore/`, `docs/`, `spike/`, `codex/`, `ui/`, `stack/`
+- マージ後はブランチを削除（GitHubの自動削除を有効）
+
 ## 進め方のベストプラクティス
 - 変更前に影響範囲と対象ファイルを明確化
 - 破壊的変更は避け、既存実装との互換性を維持
