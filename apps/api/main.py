@@ -22,6 +22,10 @@ from models import (
     ZPEJobResponse,
     ZPEJobResultResponse,
     ZPEJobStatusResponse,
+    ZPEComputeRegisterRequest,
+    ZPEComputeRegisterResponse,
+    ZPEEnrollTokenRequest,
+    ZPEEnrollTokenResponse,
     ZPEParseRequest,
     ZPEParseResponse,
     ZPEResult,
@@ -31,7 +35,13 @@ from services.lattice import params_to_vectors, vectors_to_params
 from services.parse import parse_qe_in
 from services.supercell import generate_supercell, generate_tiled_supercell
 from services.transplant import transplant_delta
-from services.zpe import ensure_mobile_indices, enqueue_zpe_job, get_result_store
+from services.zpe import (
+    ensure_mobile_indices,
+    enqueue_zpe_job,
+    get_result_store,
+    get_zpe_settings,
+)
+from services.zpe.enroll import get_enroll_store
 from services.zpe.parse import parse_atomic_species, parse_kpoints_automatic, parse_qe_structure
 
 app = FastAPI(title="Chem Model API", version="0.1.0")
@@ -56,6 +66,25 @@ def handle_redis_error(_: Request, exc: RedisError) -> JSONResponse:
         status_code=503,
         content={"detail": "redis unavailable", "error": str(exc)},
     )
+
+
+def _extract_admin_token(request: Request) -> str | None:
+    token: str | None
+    auth = request.headers.get("authorization")
+    if auth and auth.lower().startswith("bearer "):
+        token = auth.split(" ", 1)[1].strip()
+        return token or None
+    token = request.headers.get("x-admin-token")
+    return token or None
+
+
+def require_admin(request: Request) -> None:
+    settings = get_zpe_settings()
+    if not settings.admin_token:
+        return
+    token = _extract_admin_token(request)
+    if not token or token != settings.admin_token:
+        raise HTTPException(status_code=401, detail="unauthorized")
 
 
 def _ensure_job_finished(job_id: str) -> None:
@@ -171,6 +200,40 @@ def zpe_jobs(request: ZPEJobRequest) -> ZPEJobResponse:
     return ZPEJobResponse(job_id=job_id)
 
 
+@app.post("/calc/zpe/compute/enroll-tokens", response_model=ZPEEnrollTokenResponse)
+def zpe_compute_enroll_token(
+    request: ZPEEnrollTokenRequest,
+    raw: Request,
+) -> ZPEEnrollTokenResponse:
+    require_admin(raw)
+    store = get_enroll_store()
+    token = store.create_token(ttl_seconds=request.ttl_seconds, label=request.label)
+    return ZPEEnrollTokenResponse(
+        token=token.token,
+        expires_at=token.expires_at,
+        ttl_seconds=token.ttl_seconds,
+        label=token.label,
+    )
+
+
+@app.post("/calc/zpe/compute/servers/register", response_model=ZPEComputeRegisterResponse)
+def zpe_compute_register(
+    request: ZPEComputeRegisterRequest,
+) -> ZPEComputeRegisterResponse:
+    store = get_enroll_store()
+    try:
+        registration = store.consume_token(
+            request.token,
+            name=request.name,
+            meta=request.meta or None,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail="invalid enroll token") from exc
+    return ZPEComputeRegisterResponse(
+        server_id=registration.server_id,
+        registered_at=registration.registered_at,
+        name=registration.name,
+    )
 
 
 @app.get("/calc/zpe/jobs/{job_id}", response_model=ZPEJobStatusResponse)

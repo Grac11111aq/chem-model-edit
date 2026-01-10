@@ -163,3 +163,27 @@ class ZPEResult(BaseModel):
 
 class ZPEJobResultResponse(BaseModel):
     result: ZPEResult
+
+
+class ZPEEnrollTokenRequest(BaseModel):
+    ttl_seconds: Optional[int] = None
+    label: Optional[str] = None
+
+
+class ZPEEnrollTokenResponse(BaseModel):
+    token: str
+    expires_at: str
+    ttl_seconds: int
+    label: Optional[str] = None
+
+
+class ZPEComputeRegisterRequest(BaseModel):
+    token: str
+    name: Optional[str] = None
+    meta: Dict[str, str] = Field(default_factory=dict)
+
+
+class ZPEComputeRegisterResponse(BaseModel):
+    server_id: str
+    registered_at: str
+    name: Optional[str] = None

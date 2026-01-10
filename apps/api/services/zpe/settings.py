@@ -21,6 +21,8 @@ class ZPESettings(BaseSettings):
     queue_name: str = "zpe"
     compute_mode: str = "remote-queue"
     result_store: str = "redis"
+    admin_token: Optional[str] = None
+    enroll_token_ttl_seconds: int = 3600
 
     pw_command: str = "pw.x"
     pw_path: Optional[str] = None
