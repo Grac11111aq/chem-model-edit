@@ -31,6 +31,7 @@ Quantum ESPRESSO `.in` の構造を可視化・編集するWebアプリ。
 - Optional: just
 
 ## セットアップ
+詳細は `docs/setup.ja.md` を参照。
 ```bash
 git clone git@github.com:Grac11111aq/chem-model-edit.git
 cd chem-model-edit
@@ -38,6 +39,8 @@ cd chem-model-edit
 corepack enable
 corepack prepare pnpm@10.27.0 --activate
 pnpm install
+# @parcel/watcher を承認
+pnpm approve-builds
 ```
 
 ## 開発

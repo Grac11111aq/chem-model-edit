@@ -34,6 +34,7 @@ For the detailed scope and acceptance criteria, see `specs/001-chem-model-webapp
 - Optional: just
 
 ## Setup
+See `docs/setup.md` for the full setup guide.
 ```bash
 git clone git@github.com:Grac11111aq/chem-model-edit.git
 cd chem-model-edit
@@ -41,6 +42,8 @@ cd chem-model-edit
 corepack enable
 corepack prepare pnpm@10.27.0 --activate
 pnpm install
+# approve @parcel/watcher when prompted
+pnpm approve-builds
 ```
 
 ## Development

@@ -8,6 +8,11 @@ api_port := "8000"
 @default:
   just --list
 
+setup:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  ./scripts/setup-dev.sh
+
 web:
   #!/usr/bin/env bash
   set -euo pipefail
