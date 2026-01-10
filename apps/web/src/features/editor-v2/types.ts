@@ -3,6 +3,7 @@ export type WorkspaceFile = {
   name: string
   kind: 'in' | 'out'
   label: string
+  pdbText?: string
   initialOpenSections: {
     table: boolean
     parameter: boolean

@@ -16,27 +16,31 @@ import {
 import type { ToolMode, WorkspaceFile } from './types'
 import { FilePanel } from './components/FilePanel'
 import { ToolPanel } from './components/ToolPanel'
+import { DEMO_STRUCTURES } from './demoStructures'
 
 const MOCK_FILES: WorkspaceFile[] = [
   {
     id: '1',
-    name: 'benzene.in',
+    name: 'benzen.in',
     kind: 'in',
-    label: 'Benzene',
+    label: 'Benzen',
+    pdbText: DEMO_STRUCTURES.benzene,
     initialOpenSections: { table: false, parameter: false },
   },
   {
     id: '2',
-    name: 'H2O.in',
+    name: 'h2o.in',
     kind: 'in',
-    label: 'Water (H2O)',
+    label: 'H2O',
+    pdbText: DEMO_STRUCTURES.h2o,
     initialOpenSections: { table: false, parameter: true },
   },
   {
     id: '3',
-    name: 'phenol.out',
-    kind: 'out',
+    name: 'phenol.in',
+    kind: 'in',
     label: 'Phenol',
+    pdbText: DEMO_STRUCTURES.phenol,
     initialOpenSections: { table: false, parameter: false },
   },
 ]

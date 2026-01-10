@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Viewer } from 'molstar/lib/apps/viewer/app'
 
 type MolstarStructure = {
@@ -37,6 +37,7 @@ export default function MolstarViewer({
   const lastSignatureRef = useRef<string | null>(null)
   const timerRef = useRef<number | null>(null)
   const activeRef = useRef(true)
+  const [viewerReady, setViewerReady] = useState(false)
 
   const normalizedStructures = useMemo<Array<MolstarStructure>>(() => {
     if (structures && structures.length > 0) {
@@ -136,6 +137,7 @@ export default function MolstarViewer({
           return
         }
         viewerRef.current = viewer
+        setViewerReady(true)
       } catch (error) {
         console.error('Mol* Viewerの初期化に失敗しました。', error)
       }
@@ -147,11 +149,12 @@ export default function MolstarViewer({
         viewerRef.current.dispose()
         viewerRef.current = null
       }
+      setViewerReady(false)
     }
   }, [])
 
   useEffect(() => {
-    if (!viewerRef.current) {
+    if (!viewerRef.current || !viewerReady) {
       return
     }
     if (signature.length === 0) {
@@ -183,7 +186,7 @@ export default function MolstarViewer({
         window.clearTimeout(timerRef.current)
       }
     }
-  }, [normalizedStructures, signature])
+  }, [normalizedStructures, signature, viewerReady])
 
   return (
     <div
