@@ -1,0 +1,93 @@
+# Feature Specification: ZPE 計算サーバ分離（Control Plane / Compute Plane）
+
+**Feature Branch**: `[refactor/zpe-remote-compute]`  
+**Created**: 2026-01-10  
+**Status**: Draft  
+**Input**: User description: "現状のZPE系の実装はローカル計算前提で、開発PC/サービス提供側で重い化学計算が走ってしまう。計算サーバー側とサービス提供側を分離したい。"
+
+## ユーザーシナリオ & テスト（必須）
+
+### User Story 1 - サービス提供側が計算せずにジョブを投入できる (Priority: P1)
+
+UI から ZPE 計算を開始しても、サービス提供側ホストでは計算が走らず、計算サーバー側にジョブが委譲される。
+
+**Why this priority**: 低スペック環境でのE2Eテスト、クラウドホスティング時の計算負荷回避が最重要のため。  
+**Independent Test**: サービス提供側に QE/pseudo が存在しない状態でもジョブ投入が成功する。
+
+**Acceptance Scenarios**:
+1. **Given** サービス提供側に `pw.x` が無い、**When** `/calc/zpe/jobs` を呼ぶ、**Then** `job_id` が返る
+2. **Given** 計算サーバーが有効、**When** ジョブ投入、**Then** 計算は計算サーバー側で実行される
+
+---
+
+### User Story 2 - 計算サーバーが結果を共有ストアへ保存する (Priority: P1)
+
+計算サーバーが結果を共有ストアに保存し、サービス提供側はファイルシステムに依存せず結果取得できる。
+
+**Why this priority**: 物理的に分離された環境間で結果を受け渡すため。  
+**Independent Test**: サービス提供側に計算ディレクトリが無くても `/calc/zpe/jobs/{id}/result` が返る。
+
+**Acceptance Scenarios**:
+1. **Given** 計算完了ジョブ、**When** `/calc/zpe/jobs/{id}/result` を呼ぶ、**Then** 結果が JSON で返る
+2. **Given** 計算完了ジョブ、**When** `/calc/zpe/jobs/{id}/files?kind=summary|freqs` を呼ぶ、**Then** CSV/summary が返る
+
+---
+
+### User Story 3 - E2Eテスト用に軽量なモック計算を選べる (Priority: P2)
+
+計算が重い環境でもE2Eテストを回せるよう、モック計算モードを選択できる。
+
+**Why this priority**: CI/E2E の実行環境に依存しない検証を可能にするため。  
+**Independent Test**: モックモードで短時間に結果が返る。
+
+**Acceptance Scenarios**:
+1. **Given** モックモード、**When** `/calc/zpe/jobs` を呼ぶ、**Then** 数秒以内に完了ステータスが返る
+2. **Given** モックモード、**When** 結果取得、**Then** 決定論的なダミー値が返る
+
+---
+
+### Edge Cases
+
+- 計算サーバーがダウン/接続不可
+- 共有ストア（Redis/S3 など）障害
+- 結果ファイルサイズが大きく共有ストア制限に抵触
+- ジョブの再実行（同一入力のキャッシュ）
+- サービス提供側/計算サーバーで設定差分がある
+
+## 要件（必須）
+
+### Functional Requirements
+
+- **FR-001**: システムは `control-plane`（API）と `compute-plane`（計算）を論理的に分離する
+- **FR-002**: `control-plane` は QE 実行系や pseudo を必要としない
+- **FR-003**: 結果は共有ストアへ保存し、API はローカルファイルに依存しない
+- **FR-004**: 計算バックエンドを `local` / `remote-queue` / `mock` で切り替えられる
+- **FR-005**: `remote-queue` は Redis/RQ を通じて計算サーバーへ委譲する
+- **FR-006**: API は既存の `/calc/zpe/*` を維持し、UI 側の変更を最小化する
+- **FR-007**: 通信はトークン認証または限定ネットワークで保護できる
+- **FR-008**: 失敗時は原因（計算側/ストア側/設定不備）を明確に返す
+- **FR-009**: 結果ストアは Public Redis + TLS + ACL を前提にし、API/計算サーバの両方から到達可能である
+- **FR-010**: 計算サーバ登録は「短期登録トークン」を前提にし、将来のユーザー単位登録へ拡張できる設計にする（MVPは管理者のみ）
+
+### Key Entities
+
+- **ZPEComputeBackend**: 計算委譲の切り替え責務を持つアダプタ
+- **ResultStore**: 結果 JSON/CSV/summary を保存・取得するストア
+- **ZPEJobRef**: job_id と結果参照情報（ストアキー等）
+
+## 成功条件（必須）
+
+### Measurable Outcomes
+
+- **SC-001**: サービス提供側は QE 無しで起動・ジョブ投入が可能
+- **SC-002**: 計算結果取得は共有ストア経由で完結し、ローカルファイルに依存しない
+- **SC-003**: モックモードのE2Eが 10 秒以内に完了する
+- **SC-004**: 計算サーバー停止時に 5xx ではなく明確なエラー応答が返る
+
+## 決定事項
+
+- 既存の RQ + Redis を計算委譲の基盤として継続利用する
+- 結果保存は初期は Redis へ格納（小さな CSV/summary 想定）し、将来 S3 などへ差し替え可能な設計にする
+- API の `/calc/zpe/*` は継続し、UI 側を変更しない
+- Redis は Public + TLS + ACL を前提とし、Cloud Run と学内計算サーバの双方から到達できる構成を採用する
+- MVP では管理者が計算サーバ登録用の短期トークンを発行し、将来はユーザー単位の登録へ拡張する
