@@ -82,6 +82,7 @@ export default function EditorV2Page() {
   )
   const dockviewApiRef = useRef<DockviewApi | null>(null)
   const disposablesRef = useRef<Array<{ dispose: () => void }>>([])
+  const dockviewContainerRef = useRef<HTMLDivElement | null>(null)
 
   const openFile = useCallback((id: string) => {
     const api = dockviewApiRef.current
@@ -196,6 +197,13 @@ export default function EditorV2Page() {
         setActiveTool(null)
       }),
     ]
+
+    requestAnimationFrame(() => {
+      const container = dockviewContainerRef.current
+      if (container) {
+        event.api.layout(container.clientWidth, container.clientHeight, true)
+      }
+    })
   }, [])
 
   const dockviewComponents = useMemo(
@@ -242,7 +250,29 @@ export default function EditorV2Page() {
   )
 
   useEffect(() => {
+    const container = dockviewContainerRef.current
+    if (!container) {
+      return () => {
+        disposablesRef.current.forEach((disposable) => disposable.dispose())
+        disposablesRef.current = []
+      }
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) {
+        return
+      }
+      const api = dockviewApiRef.current
+      if (!api) {
+        return
+      }
+      api.layout(entry.contentRect.width, entry.contentRect.height, true)
+    })
+    observer.observe(container)
+
     return () => {
+      observer.disconnect()
       disposablesRef.current.forEach((disposable) => disposable.dispose())
       disposablesRef.current = []
     }
@@ -328,12 +358,12 @@ export default function EditorV2Page() {
                 >
                     <FileText
                       className={`h-4 w-4 ${
-                        isOpen ? 'text-blue-600' : 'text-slate-400'
+                        isActive ? 'text-blue-600' : 'text-slate-400'
                       }`}
                     />
                     <span
                       className={`truncate font-medium ${
-                        isOpen ? 'text-blue-900' : 'text-slate-600'
+                        isActive ? 'text-blue-900' : 'text-slate-600'
                       }`}
                     >
                       {file.name}
@@ -362,12 +392,14 @@ export default function EditorV2Page() {
             </div>
           </div>
 
-          <main className="flex-1 overflow-hidden bg-slate-100/50 p-4">
-            <DockviewReact
-              components={dockviewComponents}
-              onReady={handleReady}
-              className="dockview-theme-light h-full w-full"
-            />
+          <main className="flex-1 overflow-hidden bg-slate-100/50 p-4 min-h-0">
+            <div ref={dockviewContainerRef} className="h-full w-full min-h-0">
+              <DockviewReact
+                components={dockviewComponents}
+                onReady={handleReady}
+                className="dockview-theme-light h-full w-full"
+              />
+            </div>
           </main>
         </div>
       </div>
