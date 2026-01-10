@@ -18,35 +18,11 @@ import {
 import type { ToolMode, WorkspaceFile } from './types'
 import { FilePanel } from './components/FilePanel'
 import { ToolPanel } from './components/ToolPanel'
-import { DEMO_STRUCTURES } from './demoStructures'
 import 'dockview/dist/styles/dockview.css'
+import { parseQeInput } from '@/lib/api'
+import { atomsToPdb } from '@/lib/pdb'
 
-const MOCK_FILES: WorkspaceFile[] = [
-  {
-    id: '1',
-    name: 'benzen.in',
-    kind: 'in',
-    label: 'Benzen',
-    pdbText: DEMO_STRUCTURES.benzene,
-    initialOpenSections: { table: false, parameter: false },
-  },
-  {
-    id: '2',
-    name: 'h2o.in',
-    kind: 'in',
-    label: 'H2O',
-    pdbText: DEMO_STRUCTURES.h2o,
-    initialOpenSections: { table: false, parameter: true },
-  },
-  {
-    id: '3',
-    name: 'phenol.in',
-    kind: 'in',
-    label: 'Phenol',
-    pdbText: DEMO_STRUCTURES.phenol,
-    initialOpenSections: { table: false, parameter: false },
-  },
-]
+const INITIAL_FILES: WorkspaceFile[] = []
 
 const TOOL_NAV: Array<{ id: ToolMode; label: string; icon: ReactNode }> =
   [
@@ -67,26 +43,35 @@ const TOOL_NAV: Array<{ id: ToolMode; label: string; icon: ReactNode }> =
     },
   ]
 
-const FILES_BY_ID = new Map(MOCK_FILES.map((file) => [file.id, file]))
 const FILE_PANEL_PREFIX = 'file'
 const TOOL_PANEL_PREFIX = 'tool'
-const HISTORY_PANEL_ID = 'lineage'
-
 const filePanelId = (id: string) => `${FILE_PANEL_PREFIX}-${id}`
 const toolPanelId = (id: ToolMode) => `${TOOL_PANEL_PREFIX}-${id}`
 
 export default function EditorV2Page() {
+  const [files, setFiles] = useState<WorkspaceFile[]>(() => [...INITIAL_FILES])
+  const [importError, setImportError] = useState<string | null>(null)
+  const [isImporting, setIsImporting] = useState(false)
   const [activeTool, setActiveTool] = useState<ToolMode | null>(null)
   const [activeFileId, setActiveFileId] = useState<string | null>(
-    MOCK_FILES[0]?.id ?? null,
+    INITIAL_FILES[0]?.id ?? null,
+  )
+  const [pendingOpenFileId, setPendingOpenFileId] = useState<string | null>(
+    null,
   )
   const dockviewApiRef = useRef<DockviewApi | null>(null)
   const disposablesRef = useRef<Array<{ dispose: () => void }>>([])
   const dockviewContainerRef = useRef<HTMLDivElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const filesById = useMemo(
+    () => new Map(files.map((file) => [file.id, file])),
+    [files],
+  )
 
   const openFile = useCallback((id: string) => {
     const api = dockviewApiRef.current
-    const file = FILES_BY_ID.get(id)
+    const file = filesById.get(id)
     if (!api || !file) {
       return
     }
@@ -102,7 +87,7 @@ export default function EditorV2Page() {
       component: 'structure',
       params: { fileId: id },
     })
-  }, [])
+  }, [filesById])
 
   const openTool = useCallback((mode: ToolMode) => {
     const api = dockviewApiRef.current
@@ -125,57 +110,6 @@ export default function EditorV2Page() {
 
   const handleReady = useCallback((event: DockviewReadyEvent) => {
     dockviewApiRef.current = event.api
-
-    const first = MOCK_FILES[0]
-    const second = MOCK_FILES[1]
-    const third = MOCK_FILES[2]
-
-    if (first) {
-      event.api.addPanel({
-        id: filePanelId(first.id),
-        title: first.name,
-        component: 'structure',
-        params: { fileId: first.id },
-      })
-    }
-
-    if (first && second) {
-      event.api.addPanel({
-        id: filePanelId(second.id),
-        title: second.name,
-        component: 'structure',
-        params: { fileId: second.id },
-        position: {
-          referencePanel: filePanelId(first.id),
-          direction: 'right',
-        },
-      })
-    }
-
-    if (first && third) {
-      event.api.addPanel({
-        id: filePanelId(third.id),
-        title: third.name,
-        component: 'structure',
-        params: { fileId: third.id },
-        position: {
-          referencePanel: filePanelId(first.id),
-          direction: 'below',
-        },
-      })
-    }
-
-    if (second) {
-      event.api.addPanel({
-        id: HISTORY_PANEL_ID,
-        title: 'Lineage',
-        component: 'history',
-        position: {
-          referencePanel: filePanelId(second.id),
-          direction: 'below',
-        },
-      })
-    }
 
     disposablesRef.current = [
       event.api.onDidActivePanelChange((panel) => {
@@ -211,7 +145,7 @@ export default function EditorV2Page() {
       structure: ({
         params,
       }: IDockviewPanelProps<{ fileId: string }>) => {
-        const file = params?.fileId ? FILES_BY_ID.get(params.fileId) : null
+        const file = params?.fileId ? filesById.get(params.fileId) : null
         if (!file) {
           return (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -246,8 +180,59 @@ export default function EditorV2Page() {
       },
       history: () => <HistoryPanel />,
     }),
+    [filesById],
+  )
+
+  const handleImportFile = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      if (!file) {
+        return
+      }
+      setImportError(null)
+      setIsImporting(true)
+      try {
+        const content = await file.text()
+        const structure = await parseQeInput(content)
+        const baseName = file.name.replace(/\.[^/.]+$/, '') || file.name
+        const id = `import-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`
+        const pdbText =
+          structure.atoms.length > 0 ? atomsToPdb(structure.atoms) : undefined
+        const nextFile: WorkspaceFile = {
+          id,
+          name: file.name,
+          kind: 'in',
+          label: baseName,
+          pdbText,
+          initialOpenSections: { table: false, parameter: true },
+        }
+        setFiles((prev) => [...prev, nextFile])
+        setActiveFileId(id)
+        setPendingOpenFileId(id)
+      } catch (err) {
+        setImportError(
+          err instanceof Error ? err.message : 'Failed to import file.',
+        )
+      } finally {
+        setIsImporting(false)
+        event.target.value = ''
+      }
+    },
     [],
   )
+
+  useEffect(() => {
+    if (!pendingOpenFileId) {
+      return
+    }
+    if (!filesById.has(pendingOpenFileId)) {
+      return
+    }
+    openFile(pendingOpenFileId)
+    setPendingOpenFileId(null)
+  }, [filesById, openFile, pendingOpenFileId])
 
   useEffect(() => {
     const container = dockviewContainerRef.current
@@ -342,20 +327,20 @@ export default function EditorV2Page() {
               <h2 className="text-sm font-semibold text-slate-900">Structures</h2>
             </div>
 
-          <div className="flex-1 space-y-1 overflow-y-auto p-3">
-            {MOCK_FILES.map((file) => {
-              const isActive = activeFileId === file.id
-              return (
-                <button
-                  type="button"
-                  key={file.id}
-                  onClick={() => openFile(file.id)}
-                  className={`flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-all ${
-                    isActive
-                      ? 'border-blue-200 bg-blue-50 shadow-sm'
-                      : 'border-slate-200 bg-white opacity-70 hover:border-blue-300 hover:opacity-100 hover:shadow-sm'
-                  }`}
-                >
+            <div className="flex-1 space-y-1 overflow-y-auto p-3">
+              {files.map((file) => {
+                const isActive = activeFileId === file.id
+                return (
+                  <button
+                    type="button"
+                    key={file.id}
+                    onClick={() => openFile(file.id)}
+                    className={`flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-all ${
+                      isActive
+                        ? 'border-blue-200 bg-blue-50 shadow-sm'
+                        : 'border-slate-200 bg-white opacity-70 hover:border-blue-300 hover:opacity-100 hover:shadow-sm'
+                    }`}
+                  >
                     <FileText
                       className={`h-4 w-4 ${
                         isActive ? 'text-blue-600' : 'text-slate-400'
@@ -377,6 +362,12 @@ export default function EditorV2Page() {
                 )
               })}
 
+              {files.length === 0 ? (
+                <div className="rounded-md border border-dashed border-slate-200 bg-white px-3 py-4 text-xs text-slate-500">
+                  No files imported yet.
+                </div>
+              ) : null}
+
               <div className="m-2 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/50 px-4 py-8 text-center">
                 <p className="text-xs text-muted-foreground">
                   Drag files here to import
@@ -385,20 +376,52 @@ export default function EditorV2Page() {
             </div>
 
             <div className="border-t border-border bg-white p-4">
-              <button className="flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 py-2 text-white shadow-sm transition-colors hover:bg-slate-800">
+              {importError ? (
+                <p className="mb-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">
+                  {importError}
+                </p>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isImporting}
+                className="flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 py-2 text-white shadow-sm transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
                 <Plus className="h-4 w-4" />
-                <span className="text-sm font-medium">Import File</span>
+                <span className="text-sm font-medium">
+                  {isImporting ? 'Importing…' : 'Import File'}
+                </span>
               </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".in"
+                onChange={handleImportFile}
+                className="hidden"
+              />
             </div>
           </div>
 
           <main className="flex-1 overflow-hidden bg-slate-100/50 p-4 min-h-0">
-            <div ref={dockviewContainerRef} className="h-full w-full min-h-0">
+            <div
+              ref={dockviewContainerRef}
+              className="relative h-full w-full min-h-0"
+            >
               <DockviewReact
                 components={dockviewComponents}
                 onReady={handleReady}
                 className="dockview-theme-light h-full w-full"
               />
+              {files.length === 0 ? (
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 text-sm text-slate-500">
+                  <div className="rounded-full bg-white px-4 py-2 shadow-sm">
+                    Import a .in file to start.
+                  </div>
+                  <span className="text-xs text-slate-400">
+                    Your workspace begins empty.
+                  </span>
+                </div>
+              ) : null}
             </div>
           </main>
         </div>
