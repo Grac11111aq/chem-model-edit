@@ -1,21 +1,26 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class ZPESettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="ZPE_",
-        env_file=".env",
+        env_file=str(_ENV_FILE),
         extra="ignore",
     )
 
     redis_url: str = "redis://localhost:6379/0"
     work_dir: str = "zpe_jobs"
     queue_name: str = "zpe"
+    compute_mode: str = "remote-queue"
+    result_store: str = "redis"
 
     pw_command: str = "pw.x"
     pw_path: Optional[str] = None

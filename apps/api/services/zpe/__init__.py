@@ -11,6 +11,7 @@ from .parse import (
     parse_qe_structure,
 )
 from .queue import fetch_job, get_queue, get_redis_connection
+from .result_store import get_result_store
 from .settings import ZPESettings, get_zpe_settings
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "extract_fixed_indices",
     "fetch_job",
     "get_queue",
+    "get_result_store",
     "get_redis_connection",
     "get_zpe_settings",
     "parse_atomic_species",
