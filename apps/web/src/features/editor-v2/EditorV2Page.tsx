@@ -52,6 +52,10 @@ export default function EditorV2Page() {
   const [files, setFiles] = useState<WorkspaceFile[]>(() => [...INITIAL_FILES])
   const [importError, setImportError] = useState<string | null>(null)
   const [isImporting, setIsImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState<{
+    total: number
+    done: number
+  } | null>(null)
   const [activeTool, setActiveTool] = useState<ToolMode | null>(null)
   const [activeFileId, setActiveFileId] = useState<string | null>(
     INITIAL_FILES[0]?.id ?? null,
@@ -185,38 +189,66 @@ export default function EditorV2Page() {
 
   const handleImportFile = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      if (!file) {
+      const fileList = Array.from(event.target.files ?? [])
+      if (fileList.length === 0) {
         return
       }
       setImportError(null)
       setIsImporting(true)
+      setImportProgress({ total: fileList.length, done: 0 })
+      const nextFiles: WorkspaceFile[] = []
+      const failedFiles: string[] = []
+      let firstImportedId: string | null = null
+      let doneCount = 0
       try {
-        const content = await file.text()
-        const structure = await parseQeInput(content)
-        const baseName = file.name.replace(/\.[^/.]+$/, '') || file.name
-        const id = `import-${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2, 8)}`
-        const pdbText =
-          structure.atoms.length > 0 ? atomsToPdb(structure.atoms) : undefined
-        const nextFile: WorkspaceFile = {
-          id,
-          name: file.name,
-          kind: 'in',
-          label: baseName,
-          pdbText,
-          initialOpenSections: { table: false, parameter: true },
+        for (const file of fileList) {
+          try {
+            const content = await file.text()
+            const structure = await parseQeInput(content)
+            const baseName = file.name.replace(/\.[^/.]+$/, '') || file.name
+            const id = `import-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2, 8)}`
+            const pdbText =
+              structure.atoms.length > 0
+                ? atomsToPdb(structure.atoms)
+                : undefined
+            const nextFile: WorkspaceFile = {
+              id,
+              name: file.name,
+              kind: 'in',
+              label: baseName,
+              pdbText,
+              initialOpenSections: { table: false, parameter: true },
+            }
+            nextFiles.push(nextFile)
+            if (!firstImportedId) {
+              firstImportedId = id
+            }
+          } catch (_err) {
+            failedFiles.push(file.name)
+          } finally {
+            doneCount += 1
+            setImportProgress({ total: fileList.length, done: doneCount })
+          }
         }
-        setFiles((prev) => [...prev, nextFile])
-        setActiveFileId(id)
-        setPendingOpenFileId(id)
-      } catch (err) {
-        setImportError(
-          err instanceof Error ? err.message : 'Failed to import file.',
-        )
+
+        if (nextFiles.length > 0) {
+          setFiles((prev) => [...prev, ...nextFiles])
+          if (firstImportedId) {
+            setActiveFileId(firstImportedId)
+            setPendingOpenFileId(firstImportedId)
+          }
+        }
+
+        if (failedFiles.length > 0) {
+          setImportError(
+            `${failedFiles.length} file(s) failed: ${failedFiles.join(', ')}`,
+          )
+        }
       } finally {
         setIsImporting(false)
+        setImportProgress(null)
         event.target.value = ''
       }
     },
@@ -262,6 +294,12 @@ export default function EditorV2Page() {
       disposablesRef.current = []
     }
   }, [])
+
+  const importLabel = isImporting
+    ? importProgress
+      ? `Importing… (${importProgress.done}/${importProgress.total})`
+      : 'Importing…'
+    : 'Import Files'
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background font-sans text-foreground">
@@ -388,14 +426,13 @@ export default function EditorV2Page() {
                 className="flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 py-2 text-white shadow-sm transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Plus className="h-4 w-4" />
-                <span className="text-sm font-medium">
-                  {isImporting ? 'Importing…' : 'Import File'}
-                </span>
+                <span className="text-sm font-medium">{importLabel}</span>
               </button>
               <input
                 ref={fileInputRef}
                 type="file"
                 accept=".in"
+                multiple
                 onChange={handleImportFile}
                 className="hidden"
               />
