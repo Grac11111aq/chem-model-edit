@@ -8,7 +8,9 @@ from typing import Dict, List, Optional
 import numpy as np
 
 
-def sanitize_vib_cache(job_dir: Path, name: str, natoms: Optional[int] = None) -> Dict[str, object]:
+def sanitize_vib_cache(
+    job_dir: Path, name: str, natoms: Optional[int] = None
+) -> Dict[str, object]:
     roots_relaxed = [job_dir / name]
 
     deleted = 0
@@ -62,7 +64,11 @@ def sanitize_vib_cache(job_dir: Path, name: str, natoms: Optional[int] = None) -
             for jf in base.rglob("cache*.json"):
                 check_and_maybe_delete(jf, strict=True)
 
-    return {"deleted_files": deleted, "checked_files": checked, "deleted_list": deleted_list}
+    return {
+        "deleted_files": deleted,
+        "checked_files": checked,
+        "deleted_list": deleted_list,
+    }
 
 
 def clean_vib_cache(job_dir: Path, vib_name: str) -> None:

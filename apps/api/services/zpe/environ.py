@@ -23,7 +23,9 @@ def resolve_environ_path(
     for candidate in candidates:
         if candidate.exists():
             return candidate
-    raise FileNotFoundError("environ.in が見つかりません。ZPE_ENVIRON_PATH を指定してください。")
+    raise FileNotFoundError(
+        "environ.in が見つかりません。ZPE_ENVIRON_PATH を指定してください。"
+    )
 
 
 def prepare_environ_files(

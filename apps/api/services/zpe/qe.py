@@ -36,7 +36,9 @@ def build_espresso_profile(
     if {"command", "argv"} <= params:
         kwargs["command"] = settings.mpi_cmd if use_mpi else pw
         if use_mpi:
-            kwargs["argv"] = ["-np", str(np_core), pw] + (["-environ"] if environ else [])
+            kwargs["argv"] = ["-np", str(np_core), pw] + (
+                ["-environ"] if environ else []
+            )
         else:
             kwargs["argv"] = ["-environ"] if environ else []
     elif "command" in params:
@@ -55,5 +57,7 @@ def resolve_pw_command(settings: ZPESettings) -> str:
             return str(path)
     pw = shutil.which(settings.pw_command)
     if pw is None:
-        raise FileNotFoundError("pw.x が見つかりません。ZPE_PW_PATH を設定してください。")
+        raise FileNotFoundError(
+            "pw.x が見つかりません。ZPE_PW_PATH を設定してください。"
+        )
     return pw

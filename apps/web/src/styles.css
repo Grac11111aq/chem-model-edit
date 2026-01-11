@@ -144,30 +144,16 @@ code {
 
 @layer utilities {
   .bg-grid-slate-100\/50 {
-    background-image: linear-gradient(
-        to right,
-        rgb(226 232 240 / 0.45) 1px,
-        transparent 1px
-      ),
-      linear-gradient(
-        to bottom,
-        rgb(226 232 240 / 0.45) 1px,
-        transparent 1px
-      );
+    background-image:
+      linear-gradient(to right, rgb(226 232 240 / 0.45) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(226 232 240 / 0.45) 1px, transparent 1px);
     background-size: 16px 16px;
   }
 
   .bg-grid-slate-200\/50 {
-    background-image: linear-gradient(
-        to right,
-        rgb(203 213 225 / 0.55) 1px,
-        transparent 1px
-      ),
-      linear-gradient(
-        to bottom,
-        rgb(203 213 225 / 0.55) 1px,
-        transparent 1px
-      );
+    background-image:
+      linear-gradient(to right, rgb(203 213 225 / 0.55) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(203 213 225 / 0.55) 1px, transparent 1px);
     background-size: 16px 16px;
   }
 }

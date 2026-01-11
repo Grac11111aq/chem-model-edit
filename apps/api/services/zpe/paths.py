@@ -27,7 +27,9 @@ def resolve_pseudo_dir(
                 return str(path)
             if input_dir:
                 return str(Path(input_dir) / path)
-    raise ValueError("pseudo_dir が設定されていません。ZPE_PSEUDO_DIR を設定してください。")
+    raise ValueError(
+        "pseudo_dir が設定されていません。ZPE_PSEUDO_DIR を設定してください。"
+    )
 
 
 def resolve_work_dir(settings: Optional[ZPESettings] = None) -> Path:

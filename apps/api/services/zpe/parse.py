@@ -122,7 +122,7 @@ def _parse_namelist_value(value: str) -> object:
             return num
         return int(lowered)
     except ValueError:
-        return value.strip().strip('"\'')
+        return value.strip().strip("\"'")
 
 
 def parse_namelist(content: str, name: str) -> Dict[str, object]:
