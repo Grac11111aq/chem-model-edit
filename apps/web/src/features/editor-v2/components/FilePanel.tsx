@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Cuboid, Minus, X } from 'lucide-react'
 
 import { CollapsibleSection } from './CollapsibleSection'
@@ -20,6 +21,12 @@ export function FilePanel({
   showHeader = true,
   className,
 }: FilePanelProps) {
+  const [viewerError, setViewerError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setViewerError(null)
+  }, [data.bcifUrl, data.pdbText])
+
   return (
     <div
       className={cn(
@@ -63,9 +70,17 @@ export function FilePanel({
           <div className="absolute inset-0 bg-grid-slate-200/50 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.7))]" />
           <div className="relative z-10 flex w-full flex-1 flex-col">
             {data.bcifUrl ? (
-              <MolstarViewer bcifUrl={data.bcifUrl} />
+              <MolstarViewer
+                bcifUrl={data.bcifUrl}
+                onError={setViewerError}
+                onLoad={() => setViewerError(null)}
+              />
             ) : data.pdbText ? (
-              <MolstarViewer pdbText={data.pdbText} />
+              <MolstarViewer
+                pdbText={data.pdbText}
+                onError={setViewerError}
+                onLoad={() => setViewerError(null)}
+              />
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center px-4 text-center text-muted-foreground">
                 <Cuboid className="mb-2 h-12 w-12 text-slate-300 transition-colors duration-300 group-hover:text-blue-400" />
@@ -76,6 +91,14 @@ export function FilePanel({
               </div>
             )}
           </div>
+          {viewerError ? (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80 px-4 text-center">
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 shadow-sm">
+                <p className="font-semibold">Viewer failed to load</p>
+                <p className="mt-1 text-xs text-red-600">{viewerError}</p>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">

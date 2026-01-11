@@ -13,6 +13,8 @@ type MolstarViewerProps = {
   pdbText?: string
   bcifUrl?: string
   structures?: Array<MolstarStructure>
+  onError?: (message: string) => void
+  onLoad?: () => void
 }
 
 const hashString = (value: string) => {
@@ -34,6 +36,8 @@ export default function MolstarViewer({
   pdbText,
   bcifUrl,
   structures,
+  onError,
+  onLoad,
 }: MolstarViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
@@ -79,58 +83,77 @@ export default function MolstarViewer({
   ) => {
     const plugin = (viewer as unknown as { plugin: any }).plugin
     await plugin.clear()
+    let loadedCount = 0
+    let lastError: string | null = null
     for (const item of items) {
       if (item.visible === false) {
         continue
       }
-      let data = null
-      let format: 'pdb' | 'bcif' = 'pdb'
-      if (item.bcifUrl) {
-        const response = await fetch(item.bcifUrl)
-        if (!response.ok) {
-          console.error('Mol* bcif 取得に失敗しました。', response.status)
+      try {
+        let data = null
+        let format: 'pdb' | 'bcif' = 'pdb'
+        if (item.bcifUrl) {
+          const response = await fetch(item.bcifUrl)
+          if (!response.ok) {
+            lastError = `BCIF fetch failed (HTTP ${response.status})`
+            console.error('Mol* bcif 取得に失敗しました。', response.status)
+            continue
+          }
+          const buffer = await response.arrayBuffer()
+          data = await plugin.builders.data.rawData(
+            { data: new Uint8Array(buffer) },
+            { state: { isGhost: true } },
+          )
+          format = 'bcif'
+        } else if (item.pdbText) {
+          data = await plugin.builders.data.rawData(
+            { data: item.pdbText },
+            { state: { isGhost: true } },
+          )
+          format = 'pdb'
+        }
+
+        if (!data) {
+          lastError = 'No structure data was provided.'
           continue
         }
-        const buffer = await response.arrayBuffer()
-        data = await plugin.builders.data.rawData(
-          { data: new Uint8Array(buffer) },
-          { state: { isGhost: true } },
-        )
-        format = 'bcif'
-      } else if (item.pdbText) {
-        data = await plugin.builders.data.rawData(
-          { data: item.pdbText },
-          { state: { isGhost: true } },
-        )
-        format = 'pdb'
-      }
 
-      if (!data) {
-        continue
-      }
-
-      const trajectory = await plugin.builders.structure.parseTrajectory(
-        data,
-        format,
-      )
-      const model = await plugin.builders.structure.createModel(trajectory)
-      const structure = await plugin.builders.structure.createStructure(model)
-      const component =
-        await plugin.builders.structure.tryCreateComponentStatic(
-          structure,
-          'all',
+        const trajectory = await plugin.builders.structure.parseTrajectory(
+          data,
+          format,
         )
-      if (component) {
-        const opacity = Math.min(1, Math.max(0, item.opacity ?? 1))
-        await plugin.builders.structure.representation.addRepresentation(
-          component,
-          {
-            type: 'ball-and-stick',
-            color: 'element-symbol',
-            typeParams: { alpha: opacity },
-          },
-        )
+        const model = await plugin.builders.structure.createModel(trajectory)
+        const structure = await plugin.builders.structure.createStructure(model)
+        const component =
+          await plugin.builders.structure.tryCreateComponentStatic(
+            structure,
+            'all',
+          )
+        if (component) {
+          const opacity = Math.min(1, Math.max(0, item.opacity ?? 1))
+          await plugin.builders.structure.representation.addRepresentation(
+            component,
+            {
+              type: 'ball-and-stick',
+              color: 'element-symbol',
+              typeParams: { alpha: opacity },
+            },
+          )
+          loadedCount += 1
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'Mol* failed to render structure.'
+        lastError = message
+        console.error('Mol* Viewer load failed.', error)
       }
+    }
+    if (loadedCount > 0) {
+      onLoad?.()
+    } else if (lastError) {
+      onError?.(lastError)
     }
     plugin.managers?.camera?.reset?.()
   }
