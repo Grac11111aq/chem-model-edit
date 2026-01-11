@@ -467,7 +467,7 @@ export default function EditorV2Page() {
                 }}
                 onDrop={(event) => {
                   event.preventDefault()
-                  void importFiles(Array.from(event.dataTransfer.files ?? []))
+                  void importFiles(Array.from(event.dataTransfer.files))
                 }}
               >
                 <p className="text-xs text-muted-foreground">
