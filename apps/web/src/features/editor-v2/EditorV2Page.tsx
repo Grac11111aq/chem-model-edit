@@ -78,6 +78,7 @@ export default function EditorV2Page() {
   const [pendingOpenFileId, setPendingOpenFileId] = useState<string | null>(
     null,
   )
+  const [isDockviewReady, setIsDockviewReady] = useState(false)
   const dockviewApiRef = useRef<DockviewApi | null>(null)
   const disposablesRef = useRef<Array<{ dispose: () => void }>>([])
   const dockviewContainerRef = useRef<HTMLDivElement | null>(null)
@@ -89,17 +90,17 @@ export default function EditorV2Page() {
   )
 
   const openFile = useCallback(
-    (id: string) => {
+    (id: string): boolean => {
       const api = dockviewApiRef.current
       const file = filesById.get(id)
       if (!api || !file) {
-        return
+        return false
       }
       const panelId = filePanelId(id)
       const existing = api.getPanel(panelId)
       if (existing) {
         existing.api.setActive()
-        return
+        return true
       }
       api.addPanel({
         id: panelId,
@@ -107,6 +108,7 @@ export default function EditorV2Page() {
         component: 'structure',
         params: { fileId: id },
       })
+      return true
     },
     [filesById],
   )
@@ -134,6 +136,7 @@ export default function EditorV2Page() {
     disposablesRef.current.forEach((disposable) => disposable.dispose())
     disposablesRef.current = []
     dockviewApiRef.current = event.api
+    setIsDockviewReady(true)
 
     disposablesRef.current = [
       event.api.onDidActivePanelChange((panel) => {
@@ -150,9 +153,11 @@ export default function EditorV2Page() {
         if (panel.id.startsWith(`${TOOL_PANEL_PREFIX}-`)) {
           const mode = panel.id.replace(`${TOOL_PANEL_PREFIX}-`, '') as ToolMode
           setActiveTool(mode)
+          setActiveFileId(null)
           return
         }
         setActiveTool(null)
+        setActiveFileId(null)
       }),
     ]
 
@@ -199,9 +204,8 @@ export default function EditorV2Page() {
     [filesById],
   )
 
-  const handleImportFile = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const fileList = Array.from(event.target.files ?? [])
+  const importFiles = useCallback(
+    async (fileList: Array<File>) => {
       if (fileList.length === 0) {
         return
       }
@@ -238,14 +242,14 @@ export default function EditorV2Page() {
               initialOpenSections: { table: false, parameter: true },
             }
             nextFiles.push(nextFile)
-            console.info(`[import] ${file.name} parsed by ${source}`)
+            console.debug('[import] parsed', { source })
             if (!firstImportedId) {
               firstImportedId = id
             }
           } catch (err) {
             const message =
               err instanceof Error && err.message ? err.message : String(err)
-            console.warn(`[import] failed to import ${file.name}`, err)
+            console.error('[import] failed to import file', err)
             failedFiles.push({
               id: `failed-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
               name: file.name,
@@ -261,7 +265,13 @@ export default function EditorV2Page() {
           setFiles((prev) => [...prev, ...nextFiles])
           if (firstImportedId) {
             setActiveFileId(firstImportedId)
-            setPendingOpenFileId(firstImportedId)
+            if (isDockviewReady) {
+              if (!openFile(firstImportedId)) {
+                setPendingOpenFileId(firstImportedId)
+              }
+            } else {
+              setPendingOpenFileId(firstImportedId)
+            }
           }
         }
 
@@ -279,10 +289,21 @@ export default function EditorV2Page() {
       } finally {
         setIsImporting(false)
         setImportProgress(null)
+      }
+    },
+    [isDockviewReady, openFile],
+  )
+
+  const handleImportFile = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const fileList = Array.from(event.target.files ?? [])
+      try {
+        await importFiles(fileList)
+      } finally {
         event.target.value = ''
       }
     },
-    [],
+    [importFiles],
   )
 
   useEffect(() => {
@@ -292,8 +313,9 @@ export default function EditorV2Page() {
     if (!filesById.has(pendingOpenFileId)) {
       return
     }
-    openFile(pendingOpenFileId)
-    setPendingOpenFileId(null)
+    if (openFile(pendingOpenFileId)) {
+      setPendingOpenFileId(null)
+    }
   }, [filesById, openFile, pendingOpenFileId])
 
   useEffect(() => {
@@ -438,7 +460,16 @@ export default function EditorV2Page() {
                 </div>
               ) : null}
 
-              <div className="m-2 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/50 px-4 py-8 text-center">
+              <div
+                className="m-2 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/50 px-4 py-8 text-center"
+                onDragOver={(event) => {
+                  event.preventDefault()
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  void importFiles(Array.from(event.dataTransfer.files ?? []))
+                }}
+              >
                 <p className="text-xs text-muted-foreground">
                   Drag files here to import
                 </p>

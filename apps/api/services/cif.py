@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from io import BytesIO
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 from tempfile import TemporaryDirectory
 from threading import Lock
@@ -42,6 +44,9 @@ def _encoding_hints(precision: int) -> list[dict[str, object]]:
 
 
 def _molstar_cif2bcif_path() -> Path:
+    env_path = os.environ.get("MOLSTAR_CIF2BCIF_PATH")
+    if env_path:
+        return Path(env_path).expanduser()
     root = Path(__file__).resolve().parents[3]
     return (
         root
@@ -57,6 +62,18 @@ def _molstar_cif2bcif_path() -> Path:
     )
 
 
+def _node_bin() -> str:
+    node_bin = os.environ.get("NODE_BIN", "node")
+    resolved = shutil.which(node_bin)
+    if resolved:
+        return resolved
+    if Path(node_bin).exists():
+        return node_bin
+    raise ValueError(
+        "Node executable not found. Set NODE_BIN or ensure node is on PATH."
+    )
+
+
 def cif_to_bcif(
     cif_text: str,
     *,
@@ -66,7 +83,7 @@ def cif_to_bcif(
     cif2bcif = _molstar_cif2bcif_path()
     if not cif2bcif.exists():
         raise ValueError(
-            "molstar cif2bcif was not found. Install dependencies in apps/web."
+            "molstar cif2bcif was not found. Set MOLSTAR_CIF2BCIF_PATH or install dependencies in apps/web."
         )
 
     with TemporaryDirectory() as tmpdir:
@@ -75,7 +92,8 @@ def cif_to_bcif(
         out_path = tmp_path / "output.bcif"
         src_path.write_text(cif_text, encoding="utf-8")
 
-        cmd = ["node", str(cif2bcif), str(src_path), str(out_path)]
+        node_bin = _node_bin()
+        cmd = [node_bin, str(cif2bcif), str(src_path), str(out_path)]
         if lossy:
             if precision is None:
                 precision = 3
