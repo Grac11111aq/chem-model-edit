@@ -1,8 +1,18 @@
+import {
+  Activity,
+  Grid3x3,
+  Layers,
+  MousePointerClick,
+  Play,
+  X,
+} from 'lucide-react'
+
+import { CollapsibleSection } from './CollapsibleSection'
+
 import type { ReactNode } from 'react'
-import { Activity, Grid3x3, Layers, MousePointerClick, Play, X } from 'lucide-react'
 
 import type { ToolMode } from '../types'
-import { CollapsibleSection } from './CollapsibleSection'
+
 import { cn } from '@/lib/utils'
 
 interface ToolPanelProps {
@@ -69,7 +79,9 @@ export function ToolPanel({
               {toolIcons[mode]}
               <span className="font-medium text-slate-500">Action Preview</span>
               {mode === 'vibration' ? (
-                <span className="mt-1 text-xs text-slate-400">Preview only</span>
+                <span className="mt-1 text-xs text-slate-400">
+                  Preview only
+                </span>
               ) : null}
             </div>
           </div>
@@ -94,13 +106,17 @@ export function ToolPanel({
               {mode === 'transfer' ? (
                 <div className="space-y-3">
                   <button className="group flex w-full items-center justify-between rounded border border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium text-slate-700 transition-colors hover:border-blue-400 hover:text-blue-600">
-                    <span className="mr-2 truncate">Select Source Structure</span>
+                    <span className="mr-2 truncate">
+                      Select Source Structure
+                    </span>
                     <span className="whitespace-nowrap rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600">
                       None
                     </span>
                   </button>
                   <button className="group flex w-full items-center justify-between rounded border border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium text-slate-700 transition-colors hover:border-blue-400 hover:text-blue-600">
-                    <span className="mr-2 truncate">Select Target Structure</span>
+                    <span className="mr-2 truncate">
+                      Select Target Structure
+                    </span>
                     <span className="whitespace-nowrap rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600">
                       None
                     </span>

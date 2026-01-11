@@ -32,6 +32,42 @@ export async function parseQeInput(content: string): Promise<Structure> {
   return data.structure
 }
 
+export async function createStructureFromQe(content: string): Promise<{
+  structure_id: string
+  structure: Structure
+  source: string
+}> {
+  const response = await fetch(`${API_BASE}/structures`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
+  return handleResponse<{
+    structure_id: string
+    structure: Structure
+    source: string
+  }>(response)
+}
+
+export function structureViewUrl(
+  structureId: string,
+  params?: {
+    format?: 'bcif'
+    lossy?: boolean
+    precision?: number
+  },
+): string {
+  const format = params?.format ?? 'bcif'
+  const lossy = params?.lossy ? 1 : 0
+  const precision = params?.precision ?? 3
+  const query = new URLSearchParams({
+    format,
+    lossy: String(lossy),
+    precision: String(precision),
+  })
+  return `${API_BASE}/structures/${structureId}/view?${query.toString()}`
+}
+
 export async function exportQeInput(structure: Structure): Promise<string> {
   const response = await fetch(`${API_BASE}/export`, {
     method: 'POST',

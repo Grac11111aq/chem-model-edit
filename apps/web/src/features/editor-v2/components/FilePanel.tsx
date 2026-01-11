@@ -1,7 +1,9 @@
 import { Cuboid, Minus, X } from 'lucide-react'
 
-import type { WorkspaceFile } from '../types'
 import { CollapsibleSection } from './CollapsibleSection'
+
+import type { WorkspaceFile } from '../types'
+
 import MolstarViewer from '@/components/molstar/MolstarViewer'
 import { cn } from '@/lib/utils'
 
@@ -60,13 +62,17 @@ export function FilePanel({
         <div className="group relative flex h-1/2 min-h-[220px] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
           <div className="absolute inset-0 bg-grid-slate-200/50 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.7))]" />
           <div className="relative z-10 flex w-full flex-1 flex-col">
-            {data.pdbText ? (
+            {data.bcifUrl ? (
+              <MolstarViewer bcifUrl={data.bcifUrl} />
+            ) : data.pdbText ? (
               <MolstarViewer pdbText={data.pdbText} />
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center px-4 text-center text-muted-foreground">
                 <Cuboid className="mb-2 h-12 w-12 text-slate-300 transition-colors duration-300 group-hover:text-blue-400" />
                 <span className="font-medium text-slate-600">{data.label}</span>
-                <span className="text-xs text-slate-400">3D Structure View</span>
+                <span className="text-xs text-slate-400">
+                  3D Structure View
+                </span>
               </div>
             )}
           </div>

@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
-import type { DockviewApi, DockviewReadyEvent, IDockviewPanelProps } from 'dockview-react'
 import { DockviewReact } from 'dockview-react'
 import {
   Activity,
@@ -12,37 +10,43 @@ import {
   Plus,
   Search,
   Settings,
-  X,
   UserCircle,
+  X,
 } from 'lucide-react'
 
-import type { ToolMode, WorkspaceFile } from './types'
 import { FilePanel } from './components/FilePanel'
 import { ToolPanel } from './components/ToolPanel'
 import 'dockview/dist/styles/dockview.css'
-import { parseQeInput } from '@/lib/api'
-import { atomsToPdb } from '@/lib/pdb'
 
-const INITIAL_FILES: WorkspaceFile[] = []
+import type {
+  DockviewApi,
+  DockviewReadyEvent,
+  IDockviewPanelProps,
+} from 'dockview-react'
+import type { ReactNode } from 'react'
 
-const TOOL_NAV: Array<{ id: ToolMode; label: string; icon: ReactNode }> =
-  [
-    {
-      id: 'transfer',
-      label: 'Transfer',
-      icon: <ArrowLeftRight />,
-    },
-    {
-      id: 'supercell',
-      label: 'Supercell',
-      icon: <Grid3x3 />,
-    },
-    {
-      id: 'vibration',
-      label: 'Vibrations',
-      icon: <Activity />,
-    },
-  ]
+import type { ToolMode, WorkspaceFile } from './types'
+import { createStructureFromQe, structureViewUrl } from '@/lib/api'
+
+const INITIAL_FILES: Array<WorkspaceFile> = []
+
+const TOOL_NAV: Array<{ id: ToolMode; label: string; icon: ReactNode }> = [
+  {
+    id: 'transfer',
+    label: 'Transfer',
+    icon: <ArrowLeftRight />,
+  },
+  {
+    id: 'supercell',
+    label: 'Supercell',
+    icon: <Grid3x3 />,
+  },
+  {
+    id: 'vibration',
+    label: 'Vibrations',
+    icon: <Activity />,
+  },
+]
 
 const FILE_PANEL_PREFIX = 'file'
 const TOOL_PANEL_PREFIX = 'tool'
@@ -50,8 +54,10 @@ const filePanelId = (id: string) => `${FILE_PANEL_PREFIX}-${id}`
 const toolPanelId = (id: ToolMode) => `${TOOL_PANEL_PREFIX}-${id}`
 
 export default function EditorV2Page() {
-  const [files, setFiles] = useState<WorkspaceFile[]>(() => [...INITIAL_FILES])
-  const [importFailures, setImportFailures] = useState<string[]>([])
+  const [files, setFiles] = useState<Array<WorkspaceFile>>(() => [
+    ...INITIAL_FILES,
+  ])
+  const [importFailures, setImportFailures] = useState<Array<string>>([])
   const [isImporting, setIsImporting] = useState(false)
   const [importProgress, setImportProgress] = useState<{
     total: number
@@ -74,25 +80,28 @@ export default function EditorV2Page() {
     [files],
   )
 
-  const openFile = useCallback((id: string) => {
-    const api = dockviewApiRef.current
-    const file = filesById.get(id)
-    if (!api || !file) {
-      return
-    }
-    const panelId = filePanelId(id)
-    const existing = api.getPanel(panelId)
-    if (existing) {
-      existing.api.setActive()
-      return
-    }
-    api.addPanel({
-      id: panelId,
-      title: file.name,
-      component: 'structure',
-      params: { fileId: id },
-    })
-  }, [filesById])
+  const openFile = useCallback(
+    (id: string) => {
+      const api = dockviewApiRef.current
+      const file = filesById.get(id)
+      if (!api || !file) {
+        return
+      }
+      const panelId = filePanelId(id)
+      const existing = api.getPanel(panelId)
+      if (existing) {
+        existing.api.setActive()
+        return
+      }
+      api.addPanel({
+        id: panelId,
+        title: file.name,
+        component: 'structure',
+        params: { fileId: id },
+      })
+    },
+    [filesById],
+  )
 
   const openTool = useCallback((mode: ToolMode) => {
     const api = dockviewApiRef.current
@@ -147,10 +156,8 @@ export default function EditorV2Page() {
 
   const dockviewComponents = useMemo(
     () => ({
-      structure: ({
-        params,
-      }: IDockviewPanelProps<{ fileId: string }>) => {
-        const file = params?.fileId ? filesById.get(params.fileId) : null
+      structure: ({ params }: IDockviewPanelProps<{ fileId: string }>) => {
+        const file = params.fileId ? filesById.get(params.fileId) : null
         if (!file) {
           return (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -166,13 +173,7 @@ export default function EditorV2Page() {
           />
         )
       },
-      tool: ({
-        params,
-        api,
-      }: IDockviewPanelProps<{ mode: ToolMode }>) => {
-        if (!params?.mode) {
-          return null
-        }
+      tool: ({ params, api }: IDockviewPanelProps<{ mode: ToolMode }>) => {
         return (
           <ToolPanel
             mode={params.mode}
@@ -196,32 +197,38 @@ export default function EditorV2Page() {
       }
       setIsImporting(true)
       setImportProgress({ total: fileList.length, done: 0 })
-      const nextFiles: WorkspaceFile[] = []
-      const failedFiles: string[] = []
+      const nextFiles: Array<WorkspaceFile> = []
+      const failedFiles: Array<string> = []
       let firstImportedId: string | null = null
       let doneCount = 0
       try {
         for (const file of fileList) {
           try {
             const content = await file.text()
-            const structure = await parseQeInput(content)
+            const { structure, structure_id, source } =
+              await createStructureFromQe(content)
             const baseName = file.name.replace(/\.[^/.]+$/, '') || file.name
             const id = `import-${Date.now()}-${Math.random()
               .toString(36)
               .slice(2, 8)}`
-            const pdbText =
-              structure.atoms.length > 0
-                ? atomsToPdb(structure.atoms)
-                : undefined
+            const bcifUrl = structureViewUrl(structure_id, {
+              format: 'bcif',
+              lossy: false,
+              precision: 3,
+            })
             const nextFile: WorkspaceFile = {
               id,
               name: file.name,
               kind: 'in',
               label: baseName,
-              pdbText,
+              structureId: structure_id,
+              structure,
+              bcifUrl,
+              parseSource: source,
               initialOpenSections: { table: false, parameter: true },
             }
             nextFiles.push(nextFile)
+            console.info(`[import] ${file.name} parsed by ${source}`)
             if (!firstImportedId) {
               firstImportedId = id
             }
@@ -277,10 +284,10 @@ export default function EditorV2Page() {
     }
 
     const observer = new ResizeObserver((entries) => {
-      const entry = entries[0]
-      if (!entry) {
+      if (entries.length === 0) {
         return
       }
+      const entry = entries[0]
       const api = dockviewApiRef.current
       if (!api) {
         return
@@ -363,7 +370,9 @@ export default function EditorV2Page() {
         <div className="flex flex-1 overflow-hidden">
           <div className="flex w-64 flex-col border-r border-border bg-slate-50/50">
             <div className="border-b border-border bg-white p-4">
-              <h2 className="text-sm font-semibold text-slate-900">Structures</h2>
+              <h2 className="text-sm font-semibold text-slate-900">
+                Structures
+              </h2>
             </div>
 
             <div className="flex-1 space-y-1 overflow-y-auto p-3">
@@ -516,18 +525,22 @@ function HistoryPanel() {
         </span>
       </div>
       <div className="flex-1 space-y-3 overflow-y-auto">
-        {['benzen.in → transfer', 'h2o.in → supercell', 'phenol.in → draft'].map(
-          (item, index) => (
-            <div
-              key={`${item}-${index}`}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
-            >
-              <p className="text-xs font-medium text-slate-600">Step {index + 1}</p>
-              <p className="text-sm text-slate-800">{item}</p>
-              <p className="text-[10px] text-slate-400">Pending review</p>
-            </div>
-          ),
-        )}
+        {[
+          'benzen.in → transfer',
+          'h2o.in → supercell',
+          'phenol.in → draft',
+        ].map((item, index) => (
+          <div
+            key={`${item}-${index}`}
+            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+          >
+            <p className="text-xs font-medium text-slate-600">
+              Step {index + 1}
+            </p>
+            <p className="text-sm text-slate-800">{item}</p>
+            <p className="text-[10px] text-slate-400">Pending review</p>
+          </div>
+        ))}
       </div>
       <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs text-slate-400">
         Drag a panel to link lineage
