@@ -9,9 +9,9 @@ from .settings import get_zpe_settings
 
 def enqueue_zpe_job(payload: Dict[str, Any]) -> str:
     settings = get_zpe_settings()
-    store = get_result_store()
     if settings.compute_mode != "remote-queue":
-        raise ValueError("compute_mode は remote-queue のみ対応しています。")
+        raise ValueError("compute_mode must be 'remote-queue'.")
+    store = get_result_store()
     job = get_queue().enqueue(
         "services.zpe.worker.run_zpe_job",
         payload,

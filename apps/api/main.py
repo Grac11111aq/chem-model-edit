@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
+from typing import Literal
+
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from pydantic import ValidationError
 from redis.exceptions import RedisError
 
 from models import (
@@ -35,6 +39,7 @@ from services.zpe import ensure_mobile_indices, enqueue_zpe_job, get_result_stor
 from services.zpe.parse import parse_atomic_species, parse_kpoints_automatic, parse_qe_structure
 
 app = FastAPI(title="Chem Model API", version="0.1.0")
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -52,9 +57,10 @@ def handle_value_error(_: Request, exc: ValueError) -> JSONResponse:
 
 @app.exception_handler(RedisError)
 def handle_redis_error(_: Request, exc: RedisError) -> JSONResponse:
+    logger.error("Redis error", exc_info=exc)
     return JSONResponse(
         status_code=503,
-        content={"detail": "redis unavailable", "error": str(exc)},
+        content={"detail": "redis unavailable"},
     )
 
 
@@ -170,9 +176,6 @@ def zpe_jobs(request: ZPEJobRequest) -> ZPEJobResponse:
     job_id = enqueue_zpe_job(payload)
     return ZPEJobResponse(job_id=job_id)
 
-
-
-
 @app.get("/calc/zpe/jobs/{job_id}", response_model=ZPEJobStatusResponse)
 def zpe_job_status(job_id: str) -> ZPEJobStatusResponse:
     store = get_result_store()
@@ -195,11 +198,17 @@ def zpe_job_result(job_id: str) -> ZPEJobResultResponse:
         result_dict = store.get_result(job_id)
     except KeyError as exc:
         raise HTTPException(status_code=500, detail="result missing after completion") from exc
-    return ZPEJobResultResponse(result=ZPEResult(**result_dict))
+    try:
+        result = ZPEResult(**result_dict)
+    except ValidationError as exc:
+        raise HTTPException(status_code=500, detail="result data invalid") from exc
+    return ZPEJobResultResponse(result=result)
 
 
 @app.get("/calc/zpe/jobs/{job_id}/files")
-def zpe_job_files(job_id: str, kind: str = Query(...)) -> Response:
+def zpe_job_files(
+    job_id: str, kind: Literal["summary", "freqs"] = Query(...)
+) -> Response:
     store = get_result_store()
     _ensure_job_finished(job_id)
     try:
