@@ -102,6 +102,7 @@ export default function EditorV2Page() {
     const existing = api.getPanel(panelId)
     if (existing) {
       existing.api.setActive()
+      bumpDockviewVersion()
       return
     }
     api.addPanel({
@@ -110,7 +111,8 @@ export default function EditorV2Page() {
       component: 'structure',
       params: { fileId: id },
     })
-  }, [filesById])
+    bumpDockviewVersion()
+  }, [bumpDockviewVersion, filesById])
 
   const openTool = useCallback((mode: ToolMode) => {
     const api = dockviewApiRef.current
@@ -121,6 +123,7 @@ export default function EditorV2Page() {
     const existing = api.getPanel(panelId)
     if (existing) {
       existing.api.setActive()
+      bumpDockviewVersion()
       return
     }
     api.addPanel({
@@ -129,7 +132,8 @@ export default function EditorV2Page() {
       component: 'tool',
       params: { mode },
     })
-  }, [])
+    bumpDockviewVersion()
+  }, [bumpDockviewVersion])
 
   const handleReady = useCallback((event: DockviewReadyEvent) => {
     const api = event.api as DockviewApi & {
@@ -346,6 +350,7 @@ export default function EditorV2Page() {
         <button
           type="button"
           className="rounded-md p-2 transition-colors hover:bg-slate-200"
+          aria-label="Open menu"
         >
           <Menu className="h-6 w-6 text-slate-700" />
         </button>
@@ -385,6 +390,7 @@ export default function EditorV2Page() {
               <input
                 type="text"
                 placeholder="Search tools..."
+                aria-label="Search tools"
                 className="w-full rounded-md border-none bg-slate-100 py-2 pl-10 pr-4 text-sm text-slate-800 outline-none transition-all placeholder:text-muted-foreground focus:bg-white focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
@@ -393,6 +399,7 @@ export default function EditorV2Page() {
           <button
             type="button"
             className="rounded-full p-1.5 transition-colors hover:bg-slate-100"
+            aria-label="User menu"
           >
             <UserCircle className="h-8 w-8 text-slate-600" />
           </button>
@@ -469,9 +476,9 @@ export default function EditorV2Page() {
                 </div>
               ) : null}
 
-              <div className="m-2 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/50 px-4 py-8 text-center">
+              <div className="m-2 rounded-lg border border-slate-200 bg-white/60 px-4 py-6 text-center">
                 <p className="text-xs text-muted-foreground">
-                  Drag files here to import
+                  Use “Import Files” below to add .in files.
                 </p>
               </div>
             </div>
