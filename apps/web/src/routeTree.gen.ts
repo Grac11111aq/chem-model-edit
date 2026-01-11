@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TransplantRouteImport } from './routes/transplant'
 import { Route as SupercellRouteImport } from './routes/supercell'
+import { Route as EditorV2RouteImport } from './routes/editor-v2'
 import { Route as EditorRouteImport } from './routes/editor'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -22,6 +23,11 @@ const TransplantRoute = TransplantRouteImport.update({
 const SupercellRoute = SupercellRouteImport.update({
   id: '/supercell',
   path: '/supercell',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EditorV2Route = EditorV2RouteImport.update({
+  id: '/editor-v2',
+  path: '/editor-v2',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EditorRoute = EditorRouteImport.update({
@@ -38,12 +44,14 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/editor': typeof EditorRoute
+  '/editor-v2': typeof EditorV2Route
   '/supercell': typeof SupercellRoute
   '/transplant': typeof TransplantRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/editor': typeof EditorRoute
+  '/editor-v2': typeof EditorV2Route
   '/supercell': typeof SupercellRoute
   '/transplant': typeof TransplantRoute
 }
@@ -51,20 +59,22 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/editor': typeof EditorRoute
+  '/editor-v2': typeof EditorV2Route
   '/supercell': typeof SupercellRoute
   '/transplant': typeof TransplantRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/editor' | '/supercell' | '/transplant'
+  fullPaths: '/' | '/editor' | '/editor-v2' | '/supercell' | '/transplant'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/editor' | '/supercell' | '/transplant'
-  id: '__root__' | '/' | '/editor' | '/supercell' | '/transplant'
+  to: '/' | '/editor' | '/editor-v2' | '/supercell' | '/transplant'
+  id: '__root__' | '/' | '/editor' | '/editor-v2' | '/supercell' | '/transplant'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   EditorRoute: typeof EditorRoute
+  EditorV2Route: typeof EditorV2Route
   SupercellRoute: typeof SupercellRoute
   TransplantRoute: typeof TransplantRoute
 }
@@ -83,6 +93,13 @@ declare module '@tanstack/react-router' {
       path: '/supercell'
       fullPath: '/supercell'
       preLoaderRoute: typeof SupercellRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/editor-v2': {
+      id: '/editor-v2'
+      path: '/editor-v2'
+      fullPath: '/editor-v2'
+      preLoaderRoute: typeof EditorV2RouteImport
       parentRoute: typeof rootRouteImport
     }
     '/editor': {
@@ -105,6 +122,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   EditorRoute: EditorRoute,
+  EditorV2Route: EditorV2Route,
   SupercellRoute: SupercellRoute,
   TransplantRoute: TransplantRoute,
 }

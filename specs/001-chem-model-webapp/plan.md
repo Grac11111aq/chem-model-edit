@@ -72,6 +72,13 @@ packages/
 - エクスポート（QE .in への書き戻し、入力形式/単位保持）
 - 出力設定画面（デフォルト保持のみ、将来拡張を見据えたUI枠）
 
+### Phase 2b: Editor UI刷新（/editor-v2 試行）
+- 新UIモックを `/editor-v2` に実装し、既存 `/editor` は維持
+- 左ツールナビ + ファイルマネージャ + ワークスペース構成へ移行
+- 特別モードの命名を整理（内部ID: transfer/supercell/vibration、表示名: Transfer / Supercell Builder / Vibrations (Preview)）
+- 機能接続は段階的に進行（最初は見た目・遷移、次にMol*・編集系）
+- ZPE/振動系は当面プレースホルダで接続なし
+
 ### Phase 3: 表面転写/距離QC (P2)
 - 2構造(A/B)の並列表示
 - 選択UI（表面領域の選択を含む）

@@ -1,10 +1,18 @@
-import { Link } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
 
 import { Activity, Database, Share2, Upload } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
 export default function Header() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
+
+  if (pathname.startsWith('/editor-v2')) {
+    return null
+  }
+
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/80 text-white backdrop-blur">
       <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-6">
@@ -31,6 +39,15 @@ export default function Header() {
               }}
             >
               Editor
+            </Link>
+            <Link
+              to="/editor-v2"
+              className="rounded-full px-4 py-1.5 transition hover:text-white"
+              activeProps={{
+                className: 'rounded-full bg-white/10 px-4 py-1.5 text-white',
+              }}
+            >
+              Editor V2
             </Link>
             <Link
               to="/supercell"

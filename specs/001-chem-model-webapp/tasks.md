@@ -117,3 +117,16 @@
 - [x] T053 [P] 開発補助: Justfile で Web/API 同時起動を追加（`Justfile`）
 - [x] T054 [US1] .in パースの手動フォールバック追加（`apps/api/services/parse.py`）
 - [x] T055 [P] フロント: 機能単位の分割と Shadcn/ui への移行（`apps/web/src/features/*`, `apps/web/src/components/ui/*`）
+
+---
+
+## Phase 9: Editor UI Refresh (/editor-v2)
+
+**Goal**: 新UIモックを別ルートで提供し、段階的に機能接続を進める
+
+- [x] T080 [P] [US1] `/editor-v2` ルートを追加し、モックUIレイアウトを実装
+- [x] T081 [P] [US1] Tools/パネルの命名整理と ZPE(振動)のプレビュー表示
+- [ ] T082 [US1] ファイルマネージャを `structures` 状態と接続
+- [ ] T083 [US1] File Panel に Mol* ビューを埋め込み
+- [ ] T084 [US1] Import/Export の導線を新UIへ接続
+- [ ] T085 [US2/US3] Tools パネルに転写/スーパーセル機能を段階移植
