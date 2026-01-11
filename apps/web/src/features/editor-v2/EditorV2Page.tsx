@@ -49,6 +49,8 @@ const TOOL_PANEL_PREFIX = 'tool'
 const filePanelId = (id: string) => `${FILE_PANEL_PREFIX}-${id}`
 const toolPanelId = (id: ToolMode) => `${TOOL_PANEL_PREFIX}-${id}`
 
+type FilePanelStatus = 'visible' | 'open' | 'closed'
+
 export default function EditorV2Page() {
   const [files, setFiles] = useState<WorkspaceFile[]>(() => [...INITIAL_FILES])
   const [importFailures, setImportFailures] = useState<string[]>([])
@@ -58,21 +60,37 @@ export default function EditorV2Page() {
     done: number
   } | null>(null)
   const [activeTool, setActiveTool] = useState<ToolMode | null>(null)
-  const [activeFileId, setActiveFileId] = useState<string | null>(
-    INITIAL_FILES[0]?.id ?? null,
-  )
   const [pendingOpenFileId, setPendingOpenFileId] = useState<string | null>(
     null,
   )
+  const [dockviewVersion, setDockviewVersion] = useState(0)
   const dockviewApiRef = useRef<DockviewApi | null>(null)
   const disposablesRef = useRef<Array<{ dispose: () => void }>>([])
   const dockviewContainerRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
+  const bumpDockviewVersion = useCallback(() => {
+    setDockviewVersion((value) => value + 1)
+  }, [])
+
   const filesById = useMemo(
     () => new Map(files.map((file) => [file.id, file])),
     [files],
   )
+
+  const fileStatuses = useMemo(() => {
+    const api = dockviewApiRef.current
+    const next = new Map<string, FilePanelStatus>()
+    files.forEach((file) => {
+      const panel = api?.getPanel(filePanelId(file.id))
+      if (!panel) {
+        next.set(file.id, 'closed')
+        return
+      }
+      next.set(file.id, panel.api.isActive ? 'visible' : 'open')
+    })
+    return next
+  }, [files, dockviewVersion])
 
   const openFile = useCallback((id: string) => {
     const api = dockviewApiRef.current
@@ -114,28 +132,40 @@ export default function EditorV2Page() {
   }, [])
 
   const handleReady = useCallback((event: DockviewReadyEvent) => {
-    dockviewApiRef.current = event.api
+    const api = event.api as DockviewApi & {
+      onDidAddPanel?: (listener: () => void) => { dispose: () => void }
+      onDidRemovePanel?: (listener: () => void) => { dispose: () => void }
+    }
+    dockviewApiRef.current = api
 
     disposablesRef.current = [
-      event.api.onDidActivePanelChange((panel) => {
+      api.onDidActivePanelChange((panel) => {
         if (!panel) {
-          setActiveFileId(null)
           setActiveTool(null)
+          bumpDockviewVersion()
           return
         }
         if (panel.id.startsWith(`${FILE_PANEL_PREFIX}-`)) {
-          setActiveFileId(panel.id.replace(`${FILE_PANEL_PREFIX}-`, ''))
           setActiveTool(null)
+          bumpDockviewVersion()
           return
         }
         if (panel.id.startsWith(`${TOOL_PANEL_PREFIX}-`)) {
           const mode = panel.id.replace(`${TOOL_PANEL_PREFIX}-`, '') as ToolMode
           setActiveTool(mode)
+          bumpDockviewVersion()
           return
         }
         setActiveTool(null)
+        bumpDockviewVersion()
       }),
     ]
+    if (api.onDidAddPanel) {
+      disposablesRef.current.push(api.onDidAddPanel(bumpDockviewVersion))
+    }
+    if (api.onDidRemovePanel) {
+      disposablesRef.current.push(api.onDidRemovePanel(bumpDockviewVersion))
+    }
 
     if (pendingOpenFileId && filesById.has(pendingOpenFileId)) {
       openFile(pendingOpenFileId)
@@ -145,10 +175,10 @@ export default function EditorV2Page() {
     requestAnimationFrame(() => {
       const container = dockviewContainerRef.current
       if (container) {
-        event.api.layout(container.clientWidth, container.clientHeight, true)
+        api.layout(container.clientWidth, container.clientHeight, true)
       }
     })
-  }, [filesById, openFile, pendingOpenFileId])
+  }, [bumpDockviewVersion, filesById, openFile, pendingOpenFileId])
 
   const dockviewComponents = useMemo(
     () => ({
@@ -230,8 +260,9 @@ export default function EditorV2Page() {
             if (!firstImportedId) {
               firstImportedId = id
             }
-          } catch (_err) {
+          } catch (err) {
             failedFiles.push(file.name)
+            console.error(`Failed to import ${file.name}:`, err)
           } finally {
             doneCount += 1
             setImportProgress({ total: fileList.length, done: doneCount })
@@ -241,7 +272,6 @@ export default function EditorV2Page() {
         if (nextFiles.length > 0) {
           setFiles((prev) => [...prev, ...nextFiles])
           if (firstImportedId) {
-            setActiveFileId(firstImportedId)
             setPendingOpenFileId(firstImportedId)
           }
         }
@@ -376,35 +406,59 @@ export default function EditorV2Page() {
 
             <div className="flex-1 space-y-1 overflow-y-auto p-3">
               {files.map((file) => {
-                const isActive = activeFileId === file.id
+                const status = fileStatuses.get(file.id) ?? 'closed'
+                const isVisible = status === 'visible'
+                const isOpen = status === 'open'
+                const statusLabel =
+                  status === 'visible'
+                    ? 'Visible'
+                    : status === 'open'
+                      ? 'Open'
+                      : 'Closed'
                 return (
                   <button
                     type="button"
                     key={file.id}
                     onClick={() => openFile(file.id)}
                     className={`flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-all ${
-                      isActive
+                      isVisible
                         ? 'border-blue-200 bg-blue-50 shadow-sm'
-                        : 'border-slate-200 bg-white opacity-70 hover:border-blue-300 hover:opacity-100 hover:shadow-sm'
+                        : isOpen
+                          ? 'border-slate-300 bg-white opacity-90 hover:border-blue-200 hover:opacity-100 hover:shadow-sm'
+                          : 'border-slate-200 bg-white opacity-60 hover:border-slate-300 hover:opacity-80 hover:shadow-sm'
                     }`}
                   >
                     <FileText
                       className={`h-4 w-4 ${
-                        isActive ? 'text-blue-600' : 'text-slate-400'
+                        isVisible
+                          ? 'text-blue-600'
+                          : isOpen
+                            ? 'text-slate-500'
+                            : 'text-slate-400'
                       }`}
                     />
                     <span
                       className={`truncate font-medium ${
-                        isActive ? 'text-blue-900' : 'text-slate-600'
+                        isVisible
+                          ? 'text-blue-900'
+                          : isOpen
+                            ? 'text-slate-700'
+                            : 'text-slate-500'
                       }`}
                     >
                       {file.name}
                     </span>
-                    {isActive ? (
-                      <span className="ml-auto text-[10px] text-blue-500">
-                        Active
-                      </span>
-                    ) : null}
+                    <span
+                      className={`ml-auto text-[10px] ${
+                        isVisible
+                          ? 'text-blue-500'
+                          : isOpen
+                            ? 'text-slate-500'
+                            : 'text-slate-400'
+                      }`}
+                    >
+                      {statusLabel}
+                    </span>
                   </button>
                 )
               })}
