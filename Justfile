@@ -76,9 +76,24 @@ api:
     echo "API_PORT $initial_port は使用中のため $port を利用します"
   fi
   cd apps/api
-  mkdir -p {{uv_cache_dir}} {{uv_tmp_dir}}
-  TMPDIR={{uv_tmp_dir}} UV_CACHE_DIR={{uv_cache_dir}} uv sync
-  TMPDIR={{uv_tmp_dir}} UV_CACHE_DIR={{uv_cache_dir}} uv run uvicorn main:app --reload --port "$port"
+  source ../../scripts/just_env.sh
+  load_just_env
+  if [[ -z "${UV_CACHE_DIR:-}" ]]; then
+    if command -v python3 >/dev/null 2>&1; then
+      cache_dir="$(python3 ../../scripts/uv_pick_cache.py "{{uv_cache_dir}}" "$HOME/.cache/uv" "/tmp/uv-cache")" || {
+        echo "UV cache でクロスディレクトリrenameが失敗します。Linux ext4上のパスをUV_CACHE_DIRで指定してください。" >&2
+        exit 1
+      }
+    else
+      cache_dir="$HOME/.cache/uv"
+    fi
+  else
+    cache_dir="$UV_CACHE_DIR"
+  fi
+  tmp_dir="${TMPDIR:-$cache_dir/tmp}"
+  mkdir -p "$cache_dir" "$tmp_dir"
+  TMPDIR="$tmp_dir" UV_CACHE_DIR="$cache_dir" uv sync
+  TMPDIR="$tmp_dir" UV_CACHE_DIR="$cache_dir" uv run uvicorn main:app --reload --port "$port"
 
 dev:
   #!/usr/bin/env bash
@@ -118,9 +133,24 @@ dev:
     echo "WEB_PORT $initial_web_port は使用中のため $web_port を利用します"
   fi
   pushd apps/api >/dev/null
-  mkdir -p {{uv_cache_dir}} {{uv_tmp_dir}}
-  TMPDIR={{uv_tmp_dir}} UV_CACHE_DIR={{uv_cache_dir}} uv sync
-  TMPDIR={{uv_tmp_dir}} UV_CACHE_DIR={{uv_cache_dir}} uv run uvicorn main:app --reload --port "$api_port" &
+  source ../../scripts/just_env.sh
+  load_just_env
+  if [[ -z "${UV_CACHE_DIR:-}" ]]; then
+    if command -v python3 >/dev/null 2>&1; then
+      cache_dir="$(python3 ../../scripts/uv_pick_cache.py "{{uv_cache_dir}}" "$HOME/.cache/uv" "/tmp/uv-cache")" || {
+        echo "UV cache でクロスディレクトリrenameが失敗します。Linux ext4上のパスをUV_CACHE_DIRで指定してください。" >&2
+        exit 1
+      }
+    else
+      cache_dir="$HOME/.cache/uv"
+    fi
+  else
+    cache_dir="$UV_CACHE_DIR"
+  fi
+  tmp_dir="${TMPDIR:-$cache_dir/tmp}"
+  mkdir -p "$cache_dir" "$tmp_dir"
+  TMPDIR="$tmp_dir" UV_CACHE_DIR="$cache_dir" uv sync
+  TMPDIR="$tmp_dir" UV_CACHE_DIR="$cache_dir" uv run uvicorn main:app --reload --port "$api_port" &
   popd >/dev/null
   pnpm -C apps/web dev --port "$web_port" &
   wait
@@ -129,12 +159,21 @@ api-test:
   #!/usr/bin/env bash
   set -euo pipefail
   pushd apps/api >/dev/null
+  source ../../scripts/just_env.sh
+  load_just_env
   if [[ -z "${UV_CACHE_DIR:-}" ]]; then
-    cache_dir="{{uv_cache_dir}}"
+    if command -v python3 >/dev/null 2>&1; then
+      cache_dir="$(python3 ../../scripts/uv_pick_cache.py "{{uv_cache_dir}}" "$HOME/.cache/uv" "/tmp/uv-cache")" || {
+        echo "UV cache でクロスディレクトリrenameが失敗します。Linux ext4上のパスをUV_CACHE_DIRで指定してください。" >&2
+        exit 1
+      }
+    else
+      cache_dir="$HOME/.cache/uv"
+    fi
   else
     cache_dir="$UV_CACHE_DIR"
   fi
-  tmp_dir="${TMPDIR:-{{uv_tmp_dir}}}"
+  tmp_dir="${TMPDIR:-$cache_dir/tmp}"
   mkdir -p "$cache_dir" "$tmp_dir"
   link_mode="${UV_LINK_MODE:-copy}"
   uv_flags=()
@@ -149,12 +188,21 @@ api-ruff:
   #!/usr/bin/env bash
   set -euo pipefail
   pushd apps/api >/dev/null
+  source ../../scripts/just_env.sh
+  load_just_env
   if [[ -z "${UV_CACHE_DIR:-}" ]]; then
-    cache_dir="{{uv_cache_dir}}"
+    if command -v python3 >/dev/null 2>&1; then
+      cache_dir="$(python3 ../../scripts/uv_pick_cache.py "{{uv_cache_dir}}" "$HOME/.cache/uv" "/tmp/uv-cache")" || {
+        echo "UV cache でクロスディレクトリrenameが失敗します。Linux ext4上のパスをUV_CACHE_DIRで指定してください。" >&2
+        exit 1
+      }
+    else
+      cache_dir="$HOME/.cache/uv"
+    fi
   else
     cache_dir="$UV_CACHE_DIR"
   fi
-  tmp_dir="${TMPDIR:-{{uv_tmp_dir}}}"
+  tmp_dir="${TMPDIR:-$cache_dir/tmp}"
   mkdir -p "$cache_dir" "$tmp_dir"
   link_mode="${UV_LINK_MODE:-copy}"
   uv_flags=()
@@ -169,12 +217,21 @@ api-mypy:
   #!/usr/bin/env bash
   set -euo pipefail
   pushd apps/api >/dev/null
+  source ../../scripts/just_env.sh
+  load_just_env
   if [[ -z "${UV_CACHE_DIR:-}" ]]; then
-    cache_dir="{{uv_cache_dir}}"
+    if command -v python3 >/dev/null 2>&1; then
+      cache_dir="$(python3 ../../scripts/uv_pick_cache.py "{{uv_cache_dir}}" "$HOME/.cache/uv" "/tmp/uv-cache")" || {
+        echo "UV cache でクロスディレクトリrenameが失敗します。Linux ext4上のパスをUV_CACHE_DIRで指定してください。" >&2
+        exit 1
+      }
+    else
+      cache_dir="$HOME/.cache/uv"
+    fi
   else
     cache_dir="$UV_CACHE_DIR"
   fi
-  tmp_dir="${TMPDIR:-{{uv_tmp_dir}}}"
+  tmp_dir="${TMPDIR:-$cache_dir/tmp}"
   mkdir -p "$cache_dir" "$tmp_dir"
   link_mode="${UV_LINK_MODE:-copy}"
   uv_flags=()

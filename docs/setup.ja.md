@@ -72,4 +72,11 @@ uv run mypy .
 ## トラブルシュート
 - サンドボックス環境では `uv sync` が `EXDEV`（cross-device rename）で失敗する場合があります。
   同一ファイルシステム上の `UV_CACHE_DIR` / `TMPDIR` を指定するか、非サンドボックス環境で実行してください。
-  Codex 向けには `Justfile` が固定パスを使うようにしてあります。
+- git worktree や複数環境で使う場合は、`.just.env`（リポジトリ直下）または
+  `~/.config/chem-model-edit/just.env` に環境ごとのデフォルトを置けます。
+  `Justfile` が自動で読み込みます。例:
+
+```bash
+UV_CACHE_DIR=/path/on/same/fs
+TMPDIR=/path/on/same/fs/tmp
+```

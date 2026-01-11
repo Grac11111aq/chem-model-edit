@@ -72,4 +72,12 @@ uv run mypy .
 ## Troubleshooting
 - In some sandboxed environments, `uv sync` can fail with `EXDEV` (cross-device rename).
   Use a non-sandboxed environment or set `UV_CACHE_DIR`/`TMPDIR` to a path on the same
-  filesystem. The `Justfile` already pins these paths for the Codex sandbox.
+  filesystem.
+- If you use git worktrees or multiple machines, you can set per-environment defaults
+  in `.just.env` (repo root) or `~/.config/chem-model-edit/just.env`. The `Justfile`
+  will load them automatically. Example:
+
+```bash
+UV_CACHE_DIR=/path/on/same/fs
+TMPDIR=/path/on/same/fs/tmp
+```
