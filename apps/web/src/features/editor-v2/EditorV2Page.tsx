@@ -617,6 +617,7 @@ function NavItem({ icon, label, onClick, isActive }: NavItemProps) {
     <button
       type="button"
       onClick={onClick}
+      aria-label={label}
       className="group flex w-full flex-col items-center gap-1 px-2"
     >
       <div
@@ -629,7 +630,7 @@ function NavItem({ icon, label, onClick, isActive }: NavItemProps) {
         {icon}
       </div>
       <span
-        className={`text-center text-[10px] font-medium leading-none ${
+        className={`text-center text-xs font-medium leading-none ${
           isActive
             ? 'font-bold text-blue-700'
             : 'text-slate-500 group-hover:text-blue-700'
