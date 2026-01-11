@@ -170,8 +170,10 @@ def run_zpe_job(payload: Dict[str, Any]) -> Dict[str, Any]:
         elapsed_seconds = (end_time - start_time).total_seconds()
 
         qe_input_label = request.input_dir or "inline"
-        checked_files = int(cache_info.get("checked_files", 0) or 0)
-        deleted_files = int(cache_info.get("deleted_files", 0) or 0)
+        checked_raw = cache_info.get("checked_files", 0)
+        deleted_raw = cache_info.get("deleted_files", 0)
+        checked_files = int(checked_raw) if isinstance(checked_raw, (int, float)) else 0
+        deleted_files = int(deleted_raw) if isinstance(deleted_raw, (int, float)) else 0
         result: Dict[str, Any] = {
             "freqs_cm": normalize_frequencies(freqs_cm),
             "zpe_ev": zpe_ev,
