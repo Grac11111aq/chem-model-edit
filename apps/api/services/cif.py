@@ -18,7 +18,7 @@ BCIF_TIMEOUT_SECONDS = 30
 def atoms_to_cif(atoms: ASEAtoms, *, wrap: bool = False) -> str:
     buffer = BytesIO()
     ase_write(buffer, atoms, format="cif", wrap=wrap)
-    return buffer.getvalue().decode("latin-1")
+    return buffer.getvalue().decode("utf-8")
 
 
 def _encoding_hints(precision: int) -> list[dict[str, object]]:

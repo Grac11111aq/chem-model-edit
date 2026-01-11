@@ -27,7 +27,15 @@ const config = defineConfig(({ mode }) => {
     viteReact(),
   ].filter(Boolean) as Array<PluginOption>
 
-  return { plugins }
+  return {
+    plugins,
+    optimizeDeps: {
+      include: ['dockview', 'dockview-react', 'dockview-core'],
+    },
+    ssr: {
+      noExternal: ['dockview', 'dockview-react', 'dockview-core'],
+    },
+  }
 })
 
 export default config

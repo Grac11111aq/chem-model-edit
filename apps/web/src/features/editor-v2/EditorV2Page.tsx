@@ -437,9 +437,9 @@ export default function EditorV2Page() {
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {importFailures.map((name) => (
+                    {importFailures.map((name, idx) => (
                       <span
-                        key={name}
+                        key={`${name}-${idx}`}
                         className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] text-red-600 shadow-sm"
                       >
                         <span className="max-w-[140px] truncate">{name}</span>

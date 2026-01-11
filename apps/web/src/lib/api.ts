@@ -65,7 +65,8 @@ export function structureViewUrl(
     lossy: String(lossy),
     precision: String(precision),
   })
-  return `${API_BASE}/structures/${structureId}/view?${query.toString()}`
+  const safeId = encodeURIComponent(structureId)
+  return `${API_BASE}/structures/${safeId}/view?${query.toString()}`
 }
 
 export async function exportQeInput(structure: Structure): Promise<string> {
