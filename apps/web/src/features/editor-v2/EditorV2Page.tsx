@@ -35,6 +35,8 @@ type ImportFailure = {
 }
 
 const INITIAL_FILES: Array<WorkspaceFile> = []
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024
+const ALLOWED_EXTENSIONS = ['.in']
 
 const TOOL_NAV: Array<{ id: ToolMode; label: string; icon: ReactNode }> = [
   {
@@ -58,6 +60,28 @@ const FILE_PANEL_PREFIX = 'file'
 const TOOL_PANEL_PREFIX = 'tool'
 const filePanelId = (id: string) => `${FILE_PANEL_PREFIX}-${id}`
 const toolPanelId = (id: ToolMode) => `${TOOL_PANEL_PREFIX}-${id}`
+const TOOL_MODE_IDS = new Set<ToolMode>(TOOL_NAV.map((tool) => tool.id))
+const isToolMode = (value: unknown): value is ToolMode =>
+  typeof value === 'string' && TOOL_MODE_IDS.has(value as ToolMode)
+const createImportId = () => {
+  if (typeof globalThis.crypto.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID()
+  }
+  return `import-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+const validateImportFile = (file: File): string | null => {
+  const lowerName = file.name.toLowerCase()
+  const hasAllowedExtension = ALLOWED_EXTENSIONS.some((ext) =>
+    lowerName.endsWith(ext),
+  )
+  if (!hasAllowedExtension) {
+    return 'Unsupported file type.'
+  }
+  if (file.size > MAX_IMPORT_BYTES) {
+    return `File too large. Max ${Math.round(MAX_IMPORT_BYTES / (1024 * 1024))}MB.`
+  }
+  return null
+}
 
 export default function EditorV2Page() {
   const [files, setFiles] = useState<Array<WorkspaceFile>>(() => [
@@ -78,6 +102,7 @@ export default function EditorV2Page() {
   const [pendingOpenFileId, setPendingOpenFileId] = useState<string | null>(
     null,
   )
+  const [pendingOpenTool, setPendingOpenTool] = useState<ToolMode | null>(null)
   const [isDockviewReady, setIsDockviewReady] = useState(false)
   const dockviewApiRef = useRef<DockviewApi | null>(null)
   const disposablesRef = useRef<Array<{ dispose: () => void }>>([])
@@ -113,16 +138,16 @@ export default function EditorV2Page() {
     [filesById],
   )
 
-  const openTool = useCallback((mode: ToolMode) => {
+  const openTool = useCallback((mode: ToolMode): boolean => {
     const api = dockviewApiRef.current
     if (!api) {
-      return
+      return false
     }
     const panelId = toolPanelId(mode)
     const existing = api.getPanel(panelId)
     if (existing) {
       existing.api.setActive()
-      return
+      return true
     }
     api.addPanel({
       id: panelId,
@@ -130,6 +155,7 @@ export default function EditorV2Page() {
       component: 'tool',
       params: { mode },
     })
+    return true
   }, [])
 
   const handleReady = useCallback((event: DockviewReadyEvent) => {
@@ -151,8 +177,13 @@ export default function EditorV2Page() {
           return
         }
         if (panel.id.startsWith(`${TOOL_PANEL_PREFIX}-`)) {
-          const mode = panel.id.replace(`${TOOL_PANEL_PREFIX}-`, '') as ToolMode
-          setActiveTool(mode)
+          const mode = panel.id.replace(`${TOOL_PANEL_PREFIX}-`, '')
+          if (isToolMode(mode)) {
+            setActiveTool(mode)
+            setActiveFileId(null)
+            return
+          }
+          setActiveTool(null)
           setActiveFileId(null)
           return
         }
@@ -188,10 +219,21 @@ export default function EditorV2Page() {
           />
         )
       },
-      tool: ({ params, api }: IDockviewPanelProps<{ mode: ToolMode }>) => {
+      tool: ({
+        params,
+        api,
+      }: IDockviewPanelProps<{ mode: ToolMode }>) => {
+        const mode = params.mode
+        if (!isToolMode(mode)) {
+          return (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              Missing tool mode
+            </div>
+          )
+        }
         return (
           <ToolPanel
-            mode={params.mode}
+            mode={mode}
             onClose={() => api.close()}
             variant="dock"
             showClose={false}
@@ -217,14 +259,23 @@ export default function EditorV2Page() {
       let doneCount = 0
       try {
         for (const file of fileList) {
+          const validationError = validateImportFile(file)
+          if (validationError) {
+            failedFiles.push({
+              id: createImportId(),
+              name: file.name,
+              message: validationError,
+            })
+            doneCount += 1
+            setImportProgress({ total: fileList.length, done: doneCount })
+            continue
+          }
           try {
             const content = await file.text()
             const { structure, structure_id, source } =
               await createStructureFromQe(content)
             const baseName = file.name.replace(/\.[^/.]+$/, '') || file.name
-            const id = `import-${Date.now()}-${Math.random()
-              .toString(36)
-              .slice(2, 8)}`
+            const id = createImportId()
             const bcifUrl = structureViewUrl(structure_id, {
               format: 'bcif',
               lossy: false,
@@ -242,16 +293,21 @@ export default function EditorV2Page() {
               initialOpenSections: { table: false, parameter: true },
             }
             nextFiles.push(nextFile)
-            console.debug('[import] parsed', { source })
+            if (import.meta.env.DEV) {
+              console.debug('[import] parsed', { source })
+            }
             if (!firstImportedId) {
               firstImportedId = id
             }
           } catch (err) {
             const message =
               err instanceof Error && err.message ? err.message : String(err)
-            console.error('[import] failed to import file', err)
+            console.error('[import] failed to import file', {
+              name: file.name,
+              message,
+            })
             failedFiles.push({
-              id: `failed-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              id: createImportId(),
               name: file.name,
               message,
             })
@@ -319,6 +375,15 @@ export default function EditorV2Page() {
   }, [filesById, openFile, pendingOpenFileId])
 
   useEffect(() => {
+    if (!pendingOpenTool || !isDockviewReady) {
+      return
+    }
+    if (openTool(pendingOpenTool)) {
+      setPendingOpenTool(null)
+    }
+  }, [isDockviewReady, openTool, pendingOpenTool])
+
+  useEffect(() => {
     const container = dockviewContainerRef.current
     if (!container) {
       return () => {
@@ -358,6 +423,7 @@ export default function EditorV2Page() {
       <aside className="z-20 flex w-16 flex-shrink-0 flex-col items-center gap-6 border-r border-border bg-slate-50 py-4">
         <button
           type="button"
+          aria-label="Open menu"
           className="rounded-md p-2 transition-colors hover:bg-slate-200"
         >
           <Menu className="h-6 w-6 text-slate-700" />
@@ -371,7 +437,9 @@ export default function EditorV2Page() {
               label={item.label}
               onClick={() => {
                 setActiveTool(item.id)
-                openTool(item.id)
+                if (!openTool(item.id)) {
+                  setPendingOpenTool(item.id)
+                }
               }}
               isActive={activeTool === item.id}
             />
@@ -405,6 +473,7 @@ export default function EditorV2Page() {
 
           <button
             type="button"
+            aria-label="Open user menu"
             className="rounded-full p-1.5 transition-colors hover:bg-slate-100"
           >
             <UserCircle className="h-8 w-8 text-slate-600" />
@@ -620,6 +689,7 @@ function NavItem({ icon, label, onClick, isActive }: NavItemProps) {
   return (
     <button
       type="button"
+      aria-label={label}
       onClick={onClick}
       className="group flex w-full flex-col items-center gap-1 px-2"
     >
