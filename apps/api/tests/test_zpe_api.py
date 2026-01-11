@@ -75,3 +75,20 @@ def test_zpe_mock_api_flow(monkeypatch):
     assert freqs.status_code == 200
     assert freqs.text.startswith("frequency_cm^-1")
 
+
+def test_zpe_job_status_missing(monkeypatch):
+    _patch_redis(monkeypatch)
+    client = TestClient(main.app)
+    response = client.get("/calc/zpe/jobs/missing-job")
+    assert response.status_code == 404
+
+
+def test_zpe_job_result_not_finished(monkeypatch):
+    fake = _patch_redis(monkeypatch)
+    store = RedisResultStore(redis=fake)
+    job_id = "job-not-finished"
+    store.set_status(job_id, "queued")
+
+    client = TestClient(main.app)
+    response = client.get(f"/calc/zpe/jobs/{job_id}/result")
+    assert response.status_code == 409
