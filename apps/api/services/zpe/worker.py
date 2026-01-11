@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 import os
 import shutil
+import uuid
 from pathlib import Path
 from typing import Any, Dict
 
@@ -14,7 +15,7 @@ from rq import get_current_job
 from models import ZPEJobRequest
 from .cache import clean_vib_cache, sanitize_vib_cache
 from .environ import prepare_environ_files, resolve_environ_path
-from .io import format_freqs_csv, format_summary, write_freqs_csv, write_result_json, write_summary
+from .io import format_freqs_csv, format_summary, write_result_json
 from .parse import (
     ensure_mobile_indices,
     extract_fixed_indices,
@@ -49,7 +50,7 @@ def run_zpe_job(payload: Dict[str, Any]) -> Dict[str, Any]:
     store = get_result_store()
 
     job = get_current_job()
-    job_id = job.id if job else payload.get("job_id", "local")
+    job_id = job.id if job else payload.get("job_id", f"local-{uuid.uuid4().hex[:8]}")
     store.set_status(job_id, "started")
 
     request = ZPEJobRequest(**payload)
@@ -70,7 +71,7 @@ def run_zpe_job(payload: Dict[str, Any]) -> Dict[str, Any]:
 
             pseudos = parse_atomic_species(request.content)
             if not pseudos:
-                raise ValueError("ATOMIC_SPECIES が見つかりません。")
+                raise ValueError("ATOMIC_SPECIES section not found in QE input")
 
             kpts = parse_kpoints_automatic(request.content)
             kpts_use = kpts[0] if kpts else _default_kpts()
@@ -169,8 +170,8 @@ def run_zpe_job(payload: Dict[str, Any]) -> Dict[str, Any]:
         elapsed_seconds = (end_time - start_time).total_seconds()
 
         qe_input_label = request.input_dir or "inline"
-        checked_files = cache_info.get("checked_files", 0)
-        deleted_files = cache_info.get("deleted_files", 0)
+        checked_files = int(cache_info.get("checked_files", 0) or 0)
+        deleted_files = int(cache_info.get("deleted_files", 0) or 0)
         result: Dict[str, Any] = {
             "freqs_cm": normalize_frequencies(freqs_cm),
             "zpe_ev": zpe_ev,
@@ -187,8 +188,8 @@ def run_zpe_job(payload: Dict[str, Any]) -> Dict[str, Any]:
             "calc_start_time": start_time.isoformat(),
             "calc_end_time": end_time.isoformat(),
             "elapsed_seconds": elapsed_seconds,
-            "cache_checked": int(checked_files) if isinstance(checked_files, (int, float)) else 0,
-            "cache_deleted": int(deleted_files) if isinstance(deleted_files, (int, float)) else 0,
+            "cache_checked": checked_files,
+            "cache_deleted": deleted_files,
             "ecutwfc": system_dict.get("ecutwfc"),
             "ecutrho": system_dict.get("ecutrho"),
         }
@@ -197,16 +198,6 @@ def run_zpe_job(payload: Dict[str, Any]) -> Dict[str, Any]:
         freqs_path = job_dir / "freqs.csv"
         result_path = job_dir / "result.json"
 
-        write_summary(
-            summary_path,
-            result,
-            pseudo_dir=pseudo_dir,
-            qe_input=qe_input_label,
-            new_calc=request.calc_mode == "new",
-        )
-        write_freqs_csv(freqs_path, freqs_cm)
-        write_result_json(result_path, result)
-
         summary_text = format_summary(
             result,
             pseudo_dir=pseudo_dir,
@@ -214,6 +205,10 @@ def run_zpe_job(payload: Dict[str, Any]) -> Dict[str, Any]:
             new_calc=request.calc_mode == "new",
         )
         freqs_csv = format_freqs_csv(freqs_cm)
+
+        summary_path.write_text(summary_text, encoding="utf-8")
+        freqs_path.write_text(freqs_csv, encoding="utf-8")
+        write_result_json(result_path, result)
 
         store.set_result(job_id, result, summary_text=summary_text, freqs_csv=freqs_csv)
         store.set_status(job_id, "finished")

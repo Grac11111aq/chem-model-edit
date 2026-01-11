@@ -1,12 +1,25 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import os
 from pathlib import Path
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+def _resolve_env_file() -> str:
+    override = os.getenv("ZPE_ENV_FILE")
+    if override:
+        return override
+    cwd = Path.cwd()
+    for base in (cwd, *cwd.parents):
+        candidate = base / ".env"
+        if candidate.is_file():
+            return str(candidate)
+    return ".env"
+
+
+_ENV_FILE = _resolve_env_file()
 
 
 class ZPESettings(BaseSettings):

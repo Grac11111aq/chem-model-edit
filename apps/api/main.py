@@ -1,8 +1,13 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, Request
+import logging
+from typing import Literal
+
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from pydantic import ValidationError
+from redis.exceptions import RedisError
 
 from models import (
     DeltaTransplantRequest,
@@ -17,14 +22,24 @@ from models import (
     SupercellRequest,
     SupercellResponse,
     TiledSupercellRequest,
+    ZPEJobRequest,
+    ZPEJobResponse,
+    ZPEJobResultResponse,
+    ZPEJobStatusResponse,
+    ZPEParseRequest,
+    ZPEParseResponse,
+    ZPEResult,
 )
 from services.export import export_qe_in
 from services.lattice import params_to_vectors, vectors_to_params
 from services.parse import parse_qe_in
 from services.supercell import generate_supercell, generate_tiled_supercell
 from services.transplant import transplant_delta
+from services.zpe import ensure_mobile_indices, enqueue_zpe_job, get_result_store
+from services.zpe.parse import parse_atomic_species, parse_kpoints_automatic, parse_qe_structure
 
 app = FastAPI(title="Chem Model API", version="0.1.0")
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,6 +53,31 @@ app.add_middleware(
 @app.exception_handler(ValueError)
 def handle_value_error(_: Request, exc: ValueError) -> JSONResponse:
     return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(RedisError)
+def handle_redis_error(_: Request, exc: RedisError) -> JSONResponse:
+    logger.error("Redis error", exc_info=exc)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "redis unavailable"},
+    )
+
+
+def _ensure_job_finished(job_id: str) -> None:
+    store = get_result_store()
+    try:
+        status = store.get_status(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="job not found") from exc
+    if status.status == "failed":
+        detail = status.detail or "unknown"
+        raise HTTPException(status_code=409, detail=f"job failed: {detail}")
+    if status.status != "finished":
+        raise HTTPException(
+            status_code=409,
+            detail=f"job not finished (status={status.status})",
+        )
 
 
 @app.get("/health")
@@ -110,4 +150,77 @@ def lattice_params_to_vectors(
     lattice = params_to_vectors(request.params)
     return LatticeConvertResponse(
         lattice=lattice, params=request.params, unit=request.unit
+    )
+
+
+@app.post("/calc/zpe/parse", response_model=ZPEParseResponse)
+def zpe_parse(request: ZPEParseRequest) -> ZPEParseResponse:
+    structure, fixed_indices = parse_qe_structure(request.content)
+    kpts = parse_kpoints_automatic(request.content)
+    return ZPEParseResponse(
+        structure=structure,
+        fixed_indices=fixed_indices,
+        atomic_species=parse_atomic_species(request.content),
+        kpoints=kpts[0] if kpts else None,
+    )
+
+
+@app.post("/calc/zpe/jobs", response_model=ZPEJobResponse)
+def zpe_jobs(request: ZPEJobRequest) -> ZPEJobResponse:
+    structure, fixed_indices = parse_qe_structure(request.content)
+    mobile_indices = ensure_mobile_indices(
+        request.mobile_indices, len(structure.atoms), fixed_indices
+    )
+    payload = request.model_dump()
+    payload["mobile_indices"] = mobile_indices
+    job_id = enqueue_zpe_job(payload)
+    return ZPEJobResponse(job_id=job_id)
+
+@app.get("/calc/zpe/jobs/{job_id}", response_model=ZPEJobStatusResponse)
+def zpe_job_status(job_id: str) -> ZPEJobStatusResponse:
+    store = get_result_store()
+    try:
+        status = store.get_status(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="job not found") from exc
+    return ZPEJobStatusResponse(
+        status=status.status,
+        detail=status.detail,
+        updated_at=status.updated_at,
+    )
+
+
+@app.get("/calc/zpe/jobs/{job_id}/result", response_model=ZPEJobResultResponse)
+def zpe_job_result(job_id: str) -> ZPEJobResultResponse:
+    store = get_result_store()
+    _ensure_job_finished(job_id)
+    try:
+        result_dict = store.get_result(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=500, detail="result missing after completion") from exc
+    try:
+        result = ZPEResult(**result_dict)
+    except ValidationError as exc:
+        raise HTTPException(status_code=500, detail="result data invalid") from exc
+    return ZPEJobResultResponse(result=result)
+
+
+@app.get("/calc/zpe/jobs/{job_id}/files")
+def zpe_job_files(
+    job_id: str, kind: Literal["summary", "freqs"] = Query(...)
+) -> Response:
+    store = get_result_store()
+    _ensure_job_finished(job_id)
+    try:
+        payload = store.get_file(job_id, kind)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=500, detail="file missing after completion") from exc
+    filename = "summary.txt" if kind == "summary" else "freqs.csv"
+    media_type = "text/plain" if kind == "summary" else "text/csv"
+    return Response(
+        content=payload,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
     )

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -108,3 +108,58 @@ class SupercellMeta(BaseModel):
 class SupercellResponse(BaseModel):
     structure: Structure
     meta: SupercellMeta
+
+
+class ZPEParseRequest(BaseModel):
+    content: str
+
+
+class ZPEParseResponse(BaseModel):
+    structure: Structure
+    fixed_indices: List[int]
+    atomic_species: Dict[str, str] = Field(default_factory=dict)
+    kpoints: Optional[Tuple[int, int, int]] = None
+
+
+class ZPEJobRequest(BaseModel):
+    content: str
+    mobile_indices: List[int]
+    use_environ: bool = False
+    input_dir: Optional[str] = None
+    calc_mode: Literal["new", "continue"] = "continue"
+
+
+class ZPEJobResponse(BaseModel):
+    job_id: str
+
+
+class ZPEJobStatusResponse(BaseModel):
+    status: str
+    detail: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ZPEResult(BaseModel):
+    freqs_cm: List[float]
+    zpe_ev: float
+    s_vib_jmol_k: float
+    mobile_indices: List[int]
+    fixed_indices: List[int]
+    kpts: Tuple[int, int, int]
+    delta: float
+    low_cut_cm: float
+    temperature: float
+    use_environ: bool
+    qe_input: str
+    pseudo_dir: str
+    calc_start_time: str
+    calc_end_time: str
+    elapsed_seconds: float
+    cache_checked: int
+    cache_deleted: int
+    ecutwfc: Optional[float] = None
+    ecutrho: Optional[float] = None
+
+
+class ZPEJobResultResponse(BaseModel):
+    result: ZPEResult

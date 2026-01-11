@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .backends import enqueue_zpe_job
 from .paths import resolve_job_file, resolve_pseudo_dir, resolve_work_dir
 from .parse import (
     ensure_mobile_indices,
@@ -17,6 +18,7 @@ from .settings import ZPESettings, get_zpe_settings
 __all__ = [
     "ZPESettings",
     "ensure_mobile_indices",
+    "enqueue_zpe_job",
     "extract_fixed_indices",
     "fetch_job",
     "get_queue",
