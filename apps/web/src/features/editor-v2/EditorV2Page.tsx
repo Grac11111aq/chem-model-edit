@@ -1,10 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent, ReactNode } from 'react'
-import type {
-  DockviewApi,
-  DockviewReadyEvent,
-  IDockviewPanelProps,
-} from 'dockview-react'
 import { DockviewReact } from 'dockview-react'
 import {
   Activity,
@@ -24,7 +18,14 @@ import { FilePanel } from './components/FilePanel'
 import { ToolPanel } from './components/ToolPanel'
 import 'dockview/dist/styles/dockview.css'
 
+import type { ChangeEvent, ReactNode } from 'react'
+import type {
+  DockviewApi,
+  DockviewReadyEvent,
+  IDockviewPanelProps,
+} from 'dockview-react'
 import type { ToolMode, WorkspaceFile } from './types'
+import type { Structure } from '@/lib/types'
 import { createStructureFromQe, structureViewUrl } from '@/lib/api'
 
 type ImportFailure = {
@@ -184,6 +185,17 @@ export default function EditorV2Page() {
     [bumpDockviewVersion],
   )
 
+  const handleStructureLoaded = useCallback(
+    (fileId: string, structure: Structure) => {
+      setFiles((prev) =>
+        prev.map((file) =>
+          file.id === fileId ? { ...file, structure } : file,
+        ),
+      )
+    },
+    [],
+  )
+
   const handleReady = useCallback(
     (event: DockviewReadyEvent) => {
       disposablesRef.current.forEach((disposable) => disposable.dispose())
@@ -245,7 +257,7 @@ export default function EditorV2Page() {
   const dockviewComponents = useMemo(
     () => ({
       structure: ({ params }: IDockviewPanelProps<{ fileId: string }>) => {
-        const file = params?.fileId ? filesById.get(params.fileId) : null
+        const file = params.fileId ? filesById.get(params.fileId) : null
         if (!file) {
           return (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -257,6 +269,9 @@ export default function EditorV2Page() {
           <FilePanel
             data={file}
             showHeader={false}
+            onStructureLoaded={(structure) =>
+              handleStructureLoaded(file.id, structure)
+            }
             className="h-full w-full border-none p-3"
           />
         )
@@ -265,7 +280,7 @@ export default function EditorV2Page() {
         params,
         api,
       }: IDockviewPanelProps<{ mode: ToolMode }>) => {
-        const mode = params?.mode
+        const mode = params.mode
         if (!isToolMode(mode)) {
           return (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

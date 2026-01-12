@@ -22,6 +22,7 @@ from models import (
     ParseResponse,
     StructureCreateRequest,
     StructureCreateResponse,
+    StructureGetResponse,
     SupercellBuildMeta,
     SupercellBuildRequest,
     SupercellBuildResponse,
@@ -45,6 +46,7 @@ from services.lattice import params_to_vectors, vectors_to_params
 from services.parse import parse_qe_in, structure_from_ase
 from services.structures import (
     create_structure_from_qe,
+    get_structure,
     get_structure_bcif,
     get_structure_entry,
     register_structure_atoms,
@@ -165,6 +167,15 @@ def create_structure(request: StructureCreateRequest) -> StructureCreateResponse
         structure=structure,
         source=source,
     )
+
+
+@app.get("/structures/{structure_id}", response_model=StructureGetResponse)
+def get_structure_route(structure_id: str) -> StructureGetResponse:
+    try:
+        structure = get_structure(structure_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Structure not found") from exc
+    return StructureGetResponse(structure=structure)
 
 
 @app.get("/structures/{structure_id}/view")

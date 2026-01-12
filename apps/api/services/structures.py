@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from threading import RLock
 from typing import Dict, Optional
 from uuid import uuid4
@@ -12,21 +12,16 @@ from models import Structure
 from services.cif import atoms_to_cif, cif_to_bcif
 from services.parse import parse_qe_atoms, structure_from_ase
 
-DEFAULT_TTL_SECONDS = 3600
-
-
 @dataclass
 class StoredStructure:
     atoms: ASEAtoms
     source: str
     cif: str
     created_at: datetime
-    expires_at: datetime
 
 
 class StructureStore:
-    def __init__(self, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> None:
-        self._ttl_seconds = ttl_seconds
+    def __init__(self) -> None:
         self._items: Dict[str, StoredStructure] = {}
         self._lock = RLock()
 
@@ -38,29 +33,17 @@ class StructureStore:
             source=source,
             cif=cif,
             created_at=now,
-            expires_at=now + timedelta(seconds=self._ttl_seconds),
         )
         with self._lock:
-            self._purge_expired(now)
             self._items[structure_id] = entry
         return structure_id
 
     def get(self, structure_id: str) -> Optional[StoredStructure]:
-        now = datetime.now(timezone.utc)
         with self._lock:
-            self._purge_expired(now)
             entry = self._items.get(structure_id)
             if not entry:
                 return None
-            if entry.expires_at <= now:
-                self._items.pop(structure_id, None)
-                return None
             return entry
-
-    def _purge_expired(self, now: datetime) -> None:
-        expired = [key for key, entry in self._items.items() if entry.expires_at <= now]
-        for key in expired:
-            self._items.pop(key, None)
 
 
 _STORE = StructureStore()
@@ -91,6 +74,11 @@ def get_structure_entry(structure_id: str) -> StoredStructure:
     if not entry:
         raise KeyError(structure_id)
     return entry
+
+
+def get_structure(structure_id: str) -> Structure:
+    entry = get_structure_entry(structure_id)
+    return structure_from_ase(entry.atoms)
 
 
 def register_structure_atoms(atoms: ASEAtoms, source: str) -> str:

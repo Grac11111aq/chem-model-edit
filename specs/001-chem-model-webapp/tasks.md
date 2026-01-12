@@ -140,3 +140,4 @@
 - [x] T086 [P] [US3] 契約ドキュメントを追加（StructureId グリッド / baseStructure lattice）
 - [x] T087 [P] [US3] API/共有型に Supercell v2 の型定義を追加
 - [x] T088 [P] [US1/US3] Spec/Plan に StructureRegistry と /structures 直接登録方針を反映
+- [x] T089 [US1] Editor v2 File Panel の原子テーブルを StructureId からロード

@@ -49,6 +49,13 @@ export async function createStructureFromQe(content: string): Promise<{
   }>(response)
 }
 
+export async function getStructure(structureId: string): Promise<Structure> {
+  const safeId = encodeURIComponent(structureId)
+  const response = await fetch(`${API_BASE}/structures/${safeId}`)
+  const data = await handleResponse<{ structure: Structure }>(response)
+  return data.structure
+}
+
 export function structureViewUrl(
   structureId: string,
   params?: {

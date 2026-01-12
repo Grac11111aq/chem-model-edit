@@ -62,6 +62,10 @@ class StructureCreateResponse(BaseModel):
     source: str
 
 
+class StructureGetResponse(BaseModel):
+    structure: Structure
+
+
 class StructureRegisterRequest(BaseModel):
     structure: Structure
     source: Optional[str] = None
