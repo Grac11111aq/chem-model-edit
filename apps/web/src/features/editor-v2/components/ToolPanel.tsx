@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Download,
-  Grid3x3,
   Layers,
   MousePointerClick,
   Play,
@@ -21,10 +20,8 @@ import {
 import { CollapsibleSection } from './CollapsibleSection'
 import { SupercellTool } from './SupercellTool'
 
-import type { ReactNode } from 'react'
-
 import type { ToolMode, WorkspaceFile } from '../types'
-import type { SupercellBuildMeta } from '@/lib/types'
+import type { Structure, SupercellBuildMeta } from '@/lib/types'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -48,12 +45,15 @@ import {
 import {
   createZpeJob,
   downloadZpeFile,
+  exportQeInput,
   fetchZpeResult,
   fetchZpeStatus,
+  getStructure,
   parseZpeInput,
   structureViewUrl,
 } from '@/lib/api'
 import type { ZPEJobStatus, ZPEParseResponse, ZPEResult } from '@/lib/types'
+import { atomsToPdb } from '@/lib/pdb'
 import { cn } from '@/lib/utils'
 import MolstarViewer from '@/components/molstar/MolstarViewer'
 
@@ -78,12 +78,6 @@ const toolTitles: Record<ToolMode, string> = {
   vibration: 'ZPE / Vibrations',
 }
 
-const toolIcons: Record<ToolMode, ReactNode> = {
-  transfer: <Layers className="mb-2 h-16 w-16 text-emerald-300" />,
-  supercell: <Grid3x3 className="mb-2 h-16 w-16 text-indigo-300" />,
-  vibration: <Play className="mb-2 h-16 w-16 text-rose-300" />,
-}
-
 type ZpeAtomRow = {
   index: number
   symbol: string
@@ -91,6 +85,14 @@ type ZpeAtomRow = {
   y: number
   z: number
   fixed: boolean
+}
+
+type TransferSummary = {
+  structure: Structure
+  pdbText: string
+  sourceAtoms: number
+  targetAtoms: number
+  transferredAtoms: number
 }
 
 const formatNumber = (value: number | null | undefined, digits = 3) => {
@@ -130,6 +132,18 @@ const downloadTextFile = (content: string, filename: string, type: string) => {
   link.download = filename
   link.click()
   URL.revokeObjectURL(url)
+}
+
+const createTransferFilename = (targetName: string) => {
+  const trimmed = targetName.trim()
+  if (!trimmed) {
+    return 'Transfered.in'
+  }
+  const match = trimmed.match(/\.[^/.]+$/)
+  const base = match ? trimmed.slice(0, -match[0].length) : trimmed
+  const extension =
+    match && match[0].toLowerCase() === '.in' ? match[0] : '.in'
+  return `${base}Transfered${extension}`
 }
 
 function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
@@ -1203,6 +1217,433 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
   )
 }
 
+function TransferToolPanel({
+  structures = [],
+}: {
+  structures?: Array<WorkspaceFile>
+}) {
+  const availableStructures = useMemo(
+    () => structures.filter((file) => file.structure || file.structureId),
+    [structures],
+  )
+  const [sourceId, setSourceId] = useState<string | null>(null)
+  const [targetId, setTargetId] = useState<string | null>(null)
+  const [transferSummary, setTransferSummary] =
+    useState<TransferSummary | null>(null)
+  const [exportContent, setExportContent] = useState<string | null>(null)
+  const [exportFilename, setExportFilename] = useState('')
+  const [transferError, setTransferError] = useState<string | null>(null)
+  const [viewerError, setViewerError] = useState<string | null>(null)
+  const [isApplying, setIsApplying] = useState(false)
+  const structureCacheRef = useRef<Record<string, Structure>>({})
+  const applyTokenRef = useRef(0)
+
+  const fileById = useMemo(
+    () => new Map(availableStructures.map((file) => [file.id, file])),
+    [availableStructures],
+  )
+  const sourceFile = sourceId ? fileById.get(sourceId) ?? null : null
+  const targetFile = targetId ? fileById.get(targetId) ?? null : null
+
+  useEffect(() => {
+    if (availableStructures.length === 0) {
+      setSourceId(null)
+      setTargetId(null)
+      return
+    }
+    let nextSourceId = sourceId
+    if (!nextSourceId || !fileById.has(nextSourceId)) {
+      nextSourceId = availableStructures[0].id
+      if (nextSourceId !== sourceId) {
+        setSourceId(nextSourceId)
+      }
+    }
+    if (!targetId || !fileById.has(targetId) || targetId === nextSourceId) {
+      const fallback = availableStructures.find(
+        (file) => file.id !== nextSourceId,
+      )
+      const nextTargetId = fallback?.id ?? null
+      if (nextTargetId !== targetId) {
+        setTargetId(nextTargetId)
+      }
+    }
+  }, [availableStructures, fileById, sourceId, targetId])
+
+  useEffect(() => {
+    setTransferSummary(null)
+    setExportContent(null)
+    setExportFilename('')
+    setTransferError(null)
+  }, [sourceId, targetId])
+
+  useEffect(() => {
+    setViewerError(null)
+  }, [transferSummary?.pdbText])
+
+  const resolveStructure = useCallback(async (file: WorkspaceFile) => {
+    if (file.structure) {
+      return file.structure
+    }
+    const cached = structureCacheRef.current[file.id]
+    if (cached) {
+      return cached
+    }
+    if (!file.structureId) {
+      return null
+    }
+    const nextStructure = await getStructure(file.structureId)
+    structureCacheRef.current[file.id] = nextStructure
+    return nextStructure
+  }, [])
+
+  const handleApply = useCallback(async () => {
+    if (!sourceId || !targetId) {
+      setTransferError('Select both source and target structures.')
+      return
+    }
+    if (sourceId === targetId) {
+      setTransferError('Source and target must be different.')
+      return
+    }
+    if (!sourceFile || !targetFile) {
+      setTransferError('Selected structures are unavailable.')
+      return
+    }
+    setTransferError(null)
+    setExportContent(null)
+    setExportFilename('')
+    const token = applyTokenRef.current + 1
+    applyTokenRef.current = token
+    setIsApplying(true)
+    try {
+      const [sourceStructure, targetStructure] = await Promise.all([
+        resolveStructure(sourceFile),
+        resolveStructure(targetFile),
+      ])
+      if (applyTokenRef.current !== token) {
+        return
+      }
+      if (!sourceStructure || !targetStructure) {
+        setTransferError('Missing structure data for transfer.')
+        return
+      }
+      const sourceAtoms = sourceStructure.atoms.length
+      const targetAtoms = targetStructure.atoms.length
+      if (sourceAtoms === 0 || targetAtoms === 0) {
+        setTransferError('Source and target must contain atoms.')
+        return
+      }
+      const transferredAtoms = Math.min(sourceAtoms, targetAtoms)
+      const nextAtoms = targetStructure.atoms.map((atom, index) => {
+        if (index >= transferredAtoms) {
+          return atom
+        }
+        const sourceAtom = sourceStructure.atoms[index]
+        return {
+          ...atom,
+          x: sourceAtom.x,
+          y: sourceAtom.y,
+          z: sourceAtom.z,
+        }
+      })
+      const nextStructure: Structure = {
+        ...targetStructure,
+        atoms: nextAtoms,
+      }
+      const pdbText = atomsToPdb(nextAtoms)
+      setTransferSummary({
+        structure: nextStructure,
+        pdbText,
+        sourceAtoms,
+        targetAtoms,
+        transferredAtoms,
+      })
+      const content = await exportQeInput(nextStructure)
+      if (applyTokenRef.current !== token) {
+        return
+      }
+      setExportContent(content)
+      setExportFilename(createTransferFilename(targetFile.name))
+    } catch (err) {
+      if (applyTokenRef.current !== token) {
+        return
+      }
+      setTransferError(
+        err instanceof Error ? err.message : 'Transfer failed to run.',
+      )
+    } finally {
+      if (applyTokenRef.current === token) {
+        setIsApplying(false)
+      }
+    }
+  }, [resolveStructure, sourceFile, sourceId, targetFile, targetId])
+
+  const handleDownload = () => {
+    if (!exportContent) {
+      setTransferError('No transferred .in file is ready to download.')
+      return
+    }
+    const filename = exportFilename || 'Transfered.in'
+    downloadTextFile(exportContent, filename, 'text/plain')
+  }
+
+  const previewReady = Boolean(transferSummary?.pdbText)
+  const canApply =
+    Boolean(sourceId && targetId && sourceId !== targetId) &&
+    !isApplying &&
+    availableStructures.length > 1
+  const canDownload = Boolean(exportContent)
+  const summarySource =
+    transferSummary?.sourceAtoms ?? sourceFile?.structure?.atoms.length ?? null
+  const summaryTarget =
+    transferSummary?.targetAtoms ?? targetFile?.structure?.atoms.length ?? null
+  const summaryTransferred = transferSummary?.transferredAtoms ?? null
+
+  return (
+    <div className="flex flex-1 gap-4 overflow-hidden">
+      <div className="flex w-[26rem] flex-shrink-0 flex-col gap-4 overflow-y-auto pr-1">
+        <div className="flex min-h-[260px] flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-3 py-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                  Action Preview
+                </p>
+                <p className="text-sm font-semibold text-slate-800">
+                  Transferred Structure
+                </p>
+              </div>
+              <Badge
+                variant="outline"
+                className="rounded-full border-slate-200 px-2 text-[10px] uppercase tracking-wide text-slate-500"
+              >
+                {previewReady ? 'ready' : 'idle'}
+              </Badge>
+            </div>
+          </div>
+          <div className="relative min-h-0 flex-1">
+            {previewReady && transferSummary ? (
+              <MolstarViewer
+                pdbText={transferSummary.pdbText}
+                onError={setViewerError}
+                onLoad={() => setViewerError(null)}
+                className="h-full w-full rounded-none border-0"
+              />
+            ) : (
+              <div className="flex h-full w-full flex-col items-center justify-center px-4 text-center text-muted-foreground">
+                <Layers className="mb-2 h-12 w-12 text-slate-300" />
+                <span className="font-medium text-slate-600">
+                  No transfer preview yet
+                </span>
+                <span className="text-xs text-slate-400">
+                  Select source/target and apply transfer.
+                </span>
+              </div>
+            )}
+            {viewerError ? (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80 px-4 text-center">
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 shadow-sm">
+                  <p className="font-semibold">Viewer failed to load</p>
+                  <p className="mt-1 text-xs text-red-600">{viewerError}</p>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                Transfer Summary
+              </p>
+              <p className="text-sm font-semibold text-slate-800">
+                Result Overview
+              </p>
+            </div>
+            <Badge
+              variant="outline"
+              className="rounded-full border-slate-200 px-2 text-[10px] uppercase tracking-wide text-slate-500"
+            >
+              {transferSummary ? 'ready' : 'pending'}
+            </Badge>
+          </div>
+          <div className="mt-3 space-y-2 text-xs text-slate-600">
+            <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+              <span>Source atoms</span>
+              <span className="font-mono">
+                {summarySource ?? '—'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+              <span>Target atoms</span>
+              <span className="font-mono">
+                {summaryTarget ?? '—'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+              <span>Transferred</span>
+              <span className="font-mono">
+                {summaryTransferred ?? '—'}
+              </span>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={handleDownload}
+              disabled={!canDownload}
+            >
+              <Download className="h-3 w-3" />
+              Download .in
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        <div className="flex h-full flex-col overflow-hidden rounded-md border border-blue-200 bg-white shadow-sm">
+          <div className="flex shrink-0 items-center gap-2 border-b border-blue-100 bg-blue-50/50 px-3 py-2">
+            <MousePointerClick className="h-4 w-4 text-blue-600" />
+            <span className="text-sm font-medium text-blue-900">Actions</span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3">
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-slate-500">
+                  Source structure
+                </label>
+                <Select
+                  value={sourceId ?? undefined}
+                  onValueChange={(value) => setSourceId(value)}
+                  disabled={availableStructures.length === 0}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue
+                      placeholder={
+                        availableStructures.length > 0
+                          ? 'Select source'
+                          : 'No structures'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableStructures.map((file) => (
+                      <SelectItem
+                        key={file.id}
+                        value={file.id}
+                        disabled={file.id === targetId}
+                      >
+                        <div className="flex w-full items-center justify-between gap-2">
+                          <span className="truncate">{file.name}</span>
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase text-slate-500">
+                            {file.kind}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-slate-500">
+                  Target structure
+                </label>
+                <Select
+                  value={targetId ?? undefined}
+                  onValueChange={(value) => setTargetId(value)}
+                  disabled={availableStructures.length < 2}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue
+                      placeholder={
+                        availableStructures.length > 1
+                          ? 'Select target'
+                          : 'Need at least two structures'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableStructures.map((file) => (
+                      <SelectItem
+                        key={file.id}
+                        value={file.id}
+                        disabled={file.id === sourceId}
+                      >
+                        <div className="flex w-full items-center justify-between gap-2">
+                          <span className="truncate">{file.name}</span>
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase text-slate-500">
+                            {file.kind}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                <div className="flex items-center justify-between">
+                  <span>Source atoms</span>
+                  <span className="font-mono">{summarySource ?? '—'}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span>Target atoms</span>
+                  <span className="font-mono">{summaryTarget ?? '—'}</span>
+                </div>
+              </div>
+
+              {transferError ? (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    <span>{transferError}</span>
+                  </div>
+                </div>
+              ) : null}
+
+              {transferSummary && exportContent && !transferError ? (
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>
+                      Transfer complete. Export ready for{' '}
+                      {exportFilename || 'download'}.
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  className="h-9 bg-emerald-600 px-4 text-xs font-semibold text-white hover:bg-emerald-700"
+                  onClick={handleApply}
+                  disabled={!canApply}
+                >
+                  {isApplying ? 'Applying…' : 'Apply Transfer'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-3 text-xs"
+                  onClick={handleDownload}
+                  disabled={!canDownload}
+                >
+                  <Download className="h-3 w-3" />
+                  Download .in
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ToolPanel({
   mode,
   files,
@@ -1248,68 +1689,9 @@ export function ToolPanel({
           structures={structures ?? []}
           onSupercellCreated={onSupercellCreated}
         />
-      ) : (
-        <div className="flex flex-1 gap-4 overflow-hidden">
-          <div className="flex w-[26rem] flex-shrink-0 flex-col gap-4 overflow-y-auto pr-1">
-            <div className="relative flex aspect-square w-full flex-col items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-slate-200 bg-white text-muted-foreground shadow-sm">
-              <div className="absolute inset-0 bg-grid-slate-100/50" />
-              <div className="relative z-10 flex flex-col items-center">
-                {toolIcons[mode]}
-                <span className="font-medium text-slate-500">
-                  Action Preview
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 opacity-50 grayscale-[0.5]">
-              <CollapsibleSection title="Table" defaultOpen={false}>
-                <div className="h-20 rounded bg-slate-100" />
-              </CollapsibleSection>
-              <CollapsibleSection title="Parameters" defaultOpen={false}>
-                <div className="h-20 rounded bg-slate-100" />
-              </CollapsibleSection>
-            </div>
-          </div>
-
-          <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-            <div className="flex h-full flex-col overflow-hidden rounded-md border border-blue-200 bg-white shadow-sm">
-              <div className="flex shrink-0 items-center gap-2 border-b border-blue-100 bg-blue-50/50 px-3 py-2">
-                <MousePointerClick className="h-4 w-4 text-blue-600" />
-                <span className="text-sm font-medium text-blue-900">
-                  Actions
-                </span>
-              </div>
-              <div className="flex-1 overflow-y-auto p-3">
-                {mode === 'transfer' ? (
-                  <div className="space-y-3">
-                    <button className="group flex w-full items-center justify-between rounded border border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium text-slate-700 transition-colors hover:border-blue-400 hover:text-blue-600">
-                      <span className="mr-2 truncate">
-                        Select Source Structure
-                      </span>
-                      <span className="whitespace-nowrap rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600">
-                        None
-                      </span>
-                    </button>
-                    <button className="group flex w-full items-center justify-between rounded border border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium text-slate-700 transition-colors hover:border-blue-400 hover:text-blue-600">
-                      <span className="mr-2 truncate">
-                        Select Target Structure
-                      </span>
-                      <span className="whitespace-nowrap rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600">
-                        None
-                      </span>
-                    </button>
-                    <div className="pt-2">
-                      <button className="w-full rounded bg-emerald-600 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700">
-                        Apply Transfer
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      ) : mode === 'transfer' ? (
+        <TransferToolPanel structures={structures ?? files ?? []} />
+      ) : null}
     </div>
   )
 }

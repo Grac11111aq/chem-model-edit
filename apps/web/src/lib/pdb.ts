@@ -15,7 +15,7 @@ export function atomsToPdb(atoms: Array<Atom>): string {
     const y = formatCoord(atom.y)
     const z = formatCoord(atom.z)
     lines.push(
-      `ATOM  ${id} ${atomName} UNK A   1    ${x}${y}${z}  1.00  0.00           ${element}`,
+      `ATOM  ${id} ${atomName} LIG A   1    ${x}${y}${z}  1.00  0.00           ${element}`,
     )
   })
   lines.push('END')
