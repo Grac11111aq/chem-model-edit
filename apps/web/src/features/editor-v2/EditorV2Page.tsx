@@ -104,6 +104,7 @@ export default function EditorV2Page() {
   )
   const [pendingOpenTool, setPendingOpenTool] = useState<ToolMode | null>(null)
   const [isDockviewReady, setIsDockviewReady] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
   const dockviewApiRef = useRef<DockviewApi | null>(null)
   const disposablesRef = useRef<Array<{ dispose: () => void }>>([])
   const dockviewContainerRef = useRef<HTMLDivElement | null>(null)
@@ -386,10 +387,7 @@ export default function EditorV2Page() {
   useEffect(() => {
     const container = dockviewContainerRef.current
     if (!container) {
-      return () => {
-        disposablesRef.current.forEach((disposable) => disposable.dispose())
-        disposablesRef.current = []
-      }
+      return
     }
 
     const observer = new ResizeObserver((entries) => {
@@ -407,11 +405,15 @@ export default function EditorV2Page() {
 
     return () => {
       observer.disconnect()
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
       disposablesRef.current.forEach((disposable) => disposable.dispose())
       disposablesRef.current = []
     }
   }, [])
-
   const importLabel = isImporting
     ? importProgress
       ? `Importing… (${importProgress.done}/${importProgress.total})`
@@ -530,12 +532,20 @@ export default function EditorV2Page() {
               ) : null}
 
               <div
-                className="m-2 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/50 px-4 py-8 text-center"
+                className={`m-2 rounded-lg border-2 border-dashed px-4 py-8 text-center transition-colors ${
+                  isDragOver
+                    ? 'border-blue-400 bg-blue-50'
+                    : 'border-slate-200 bg-slate-50/50'
+                }`}
                 onDragOver={(event) => {
                   event.preventDefault()
+                  event.dataTransfer.dropEffect = 'copy'
                 }}
+                onDragEnter={() => setIsDragOver(true)}
+                onDragLeave={() => setIsDragOver(false)}
                 onDrop={(event) => {
                   event.preventDefault()
+                  setIsDragOver(false)
                   void importFiles(Array.from(event.dataTransfer.files))
                 }}
               >
@@ -638,6 +648,11 @@ export default function EditorV2Page() {
 }
 
 function HistoryPanel() {
+  const items = [
+    'benzen.in → transfer',
+    'h2o.in → supercell',
+    'phenol.in → draft',
+  ]
   return (
     <div className="flex h-full flex-col gap-4 bg-white p-4 text-sm text-slate-700">
       <div className="flex items-center justify-between">
@@ -650,15 +665,11 @@ function HistoryPanel() {
           </p>
         </div>
         <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500">
-          3 items
+          {items.length} items
         </span>
       </div>
       <div className="flex-1 space-y-3 overflow-y-auto">
-        {[
-          'benzen.in → transfer',
-          'h2o.in → supercell',
-          'phenol.in → draft',
-        ].map((item, index) => (
+        {items.map((item, index) => (
           <div
             key={`${item}-${index}`}
             className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
