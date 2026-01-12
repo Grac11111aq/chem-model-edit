@@ -7,14 +7,13 @@ from typing import Dict, Iterable
 import numpy as np
 
 
-def write_summary(
-    path: Path,
+def format_summary(
     result: Dict[str, object],
     *,
     pseudo_dir: str,
     qe_input: str,
     new_calc: bool,
-) -> None:
+) -> str:
     lines = [
         "# ZPE summary (ASE Vibrations)",
         f"calc_start_time: {result['calc_start_time']}",
@@ -34,14 +33,32 @@ def write_summary(
         f"cache_checked: {result['cache_checked']}",
         f"cache_deleted: {result['cache_deleted']}",
     ]
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return "\n".join(lines) + "\n"
 
 
-def write_freqs_csv(path: Path, freqs_cm: Iterable[float]) -> None:
+def write_summary(
+    path: Path,
+    result: Dict[str, object],
+    *,
+    pseudo_dir: str,
+    qe_input: str,
+    new_calc: bool,
+) -> None:
+    path.write_text(
+        format_summary(result, pseudo_dir=pseudo_dir, qe_input=qe_input, new_calc=new_calc),
+        encoding="utf-8",
+    )
+
+
+def format_freqs_csv(freqs_cm: Iterable[float]) -> str:
     lines = ["frequency_cm^-1"]
     for freq in freqs_cm:
         lines.append(f"{float(np.real(freq)):.6f}")
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return "\n".join(lines) + "\n"
+
+
+def write_freqs_csv(path: Path, freqs_cm: Iterable[float]) -> None:
+    path.write_text(format_freqs_csv(freqs_cm), encoding="utf-8")
 
 
 def write_result_json(path: Path, result: Dict[str, object]) -> None:

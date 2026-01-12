@@ -10,7 +10,7 @@ dependencies = [
     "pydantic-settings>=2.8.0",
     "pymatgen>=2025.10.7",
     "redis>=5.0.8",
-    "rq>=1.16.2",
+    "rq>=2.6.1",
     "uvicorn[standard]>=0.40.0",
 ]
 
