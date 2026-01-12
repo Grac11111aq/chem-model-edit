@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from typing import Any, Literal
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,9 +22,6 @@ from models import (
     ParseResponse,
     StructureCreateRequest,
     StructureCreateResponse,
-    SupercellBuildMeta,
-    SupercellBuildRequest,
-    SupercellBuildResponse,
     SupercellRequest,
     SupercellResponse,
     TiledSupercellRequest,
@@ -42,18 +39,9 @@ from models import (
 )
 from services.export import export_qe_in
 from services.lattice import params_to_vectors, vectors_to_params
-from services.parse import parse_qe_in, structure_from_ase
-from services.structures import (
-    create_structure_from_qe,
-    get_structure_bcif,
-    get_structure_entry,
-    register_structure_atoms,
-)
-from services.supercell import (
-    build_supercell_from_grid,
-    generate_supercell,
-    generate_tiled_supercell,
-)
+from services.parse import parse_qe_in
+from services.structures import create_structure_from_qe, get_structure_bcif
+from services.supercell import generate_supercell, generate_tiled_supercell
 from services.transplant import transplant_delta
 from services.zpe import (
     ensure_mobile_indices,
@@ -74,27 +62,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-def _cell_has_lattice(cell: Any) -> bool:
-    try:
-        lengths = cell.lengths()
-    except AttributeError:
-        return False
-    return any(length > 1.0e-8 for length in lengths)
-
-
-def _cells_match(cell_a: Any, cell_b: Any, *, tol: float = 1.0e-6) -> bool:
-    try:
-        arr_a = cell_a.array
-        arr_b = cell_b.array
-    except AttributeError:
-        return False
-    for row_a, row_b in zip(arr_a, arr_b):
-        for value_a, value_b in zip(row_a, row_b):
-            if abs(float(value_a) - float(value_b)) > tol:
-                return False
-    return True
 
 
 @app.exception_handler(ValueError)
@@ -229,81 +196,6 @@ def supercell_tiled(request: TiledSupercellRequest) -> SupercellResponse:
         overlap_tolerance=request.overlapTolerance,
     )
     return SupercellResponse(structure=structure, meta=meta)
-
-
-@app.post("/supercell/build", response_model=SupercellBuildResponse)
-def supercell_build(request: SupercellBuildRequest) -> SupercellBuildResponse:
-    try:
-        base_entry = get_structure_entry(request.baseStructureId)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Structure not found") from exc
-
-    base_atoms = base_entry.atoms
-    base_cell = base_atoms.get_cell()
-    if not _cell_has_lattice(base_cell):
-        raise HTTPException(status_code=400, detail="base structure has no lattice")
-
-    tiles: dict[str, Any] = {}
-    structure_ids_used: list[str] = []
-    seen: set[str] = set()
-    for row in request.grid.tiles:
-        for structure_id in row:
-            if structure_id not in seen:
-                seen.add(structure_id)
-                structure_ids_used.append(structure_id)
-            if structure_id in tiles:
-                continue
-            try:
-                entry = get_structure_entry(structure_id)
-            except KeyError as exc:
-                raise HTTPException(
-                    status_code=404, detail="Structure not found"
-                ) from exc
-            tiles[structure_id] = entry.atoms
-
-    options = request.options
-    if options and options.validateLattice != "none":
-        for structure_id, atoms in tiles.items():
-            if structure_id == request.baseStructureId:
-                continue
-            cell = atoms.get_cell()
-            lattice_ok = _cell_has_lattice(cell) and _cells_match(base_cell, cell)
-            if lattice_ok:
-                continue
-            if options.validateLattice == "error":
-                raise HTTPException(status_code=400, detail="lattice mismatch")
-            logger.warning(
-                "supercell.build lattice mismatch: %s vs base %s",
-                structure_id,
-                request.baseStructureId,
-            )
-
-    check_overlap = bool(options.checkOverlap) if options else False
-    overlap_tolerance = options.overlapTolerance if options else None
-    atoms_out, overlap_count = build_supercell_from_grid(
-        base_atoms,
-        request.grid,
-        tiles,
-        check_overlap=check_overlap,
-        overlap_tolerance=overlap_tolerance,
-    )
-
-    structure_id = register_structure_atoms(atoms_out, source="supercell-build")
-    include_structure = bool(request.output.includeStructure) if request.output else False
-    structure = structure_from_ase(atoms_out) if include_structure else None
-    meta = SupercellBuildMeta(
-        rows=request.grid.rows,
-        cols=request.grid.cols,
-        tileCount=request.grid.rows * request.grid.cols,
-        overlapCount=overlap_count if check_overlap else None,
-        baseStructureId=request.baseStructureId,
-        structureIdsUsed=structure_ids_used,
-    )
-    return SupercellBuildResponse(
-        structureId=structure_id,
-        structure=structure,
-        meta=meta,
-    )
 
 
 @app.post("/lattice/vectors-to-params", response_model=LatticeConvertResponse)

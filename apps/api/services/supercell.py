@@ -2,17 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable, List, Tuple
 
-from ase import Atoms as ASEAtoms
-
-from models import (
-    Atom,
-    Lattice,
-    Structure,
-    SupercellGrid,
-    SupercellGridAxis,
-    SupercellMeta,
-    Vector3,
-)
+from models import Atom, Lattice, Structure, SupercellMeta, Vector3
 
 
 def _apply_shift(
@@ -155,70 +145,3 @@ def generate_tiled_supercell(
         overlapCount=overlap_count,
     )
     return Structure(atoms=atoms_out, lattice=out_lattice), meta
-
-
-def build_supercell_from_grid(
-    base_atoms: ASEAtoms,
-    grid: SupercellGrid,
-    tiles: dict[str, ASEAtoms],
-    *,
-    check_overlap: bool = False,
-    overlap_tolerance: float | None = None,
-) -> tuple[ASEAtoms, int]:
-    if check_overlap and (overlap_tolerance is None or overlap_tolerance <= 0):
-        raise ValueError("重複チェックの許容誤差が無効です。")
-
-    axis = grid.axis or SupercellGridAxis(row="b", col="a")
-    base_cell = base_atoms.get_cell()
-    base_a = base_cell[0]
-    base_b = base_cell[1]
-
-    row_vec = base_a if axis.row == "a" else base_b
-    col_vec = base_a if axis.col == "a" else base_b
-
-    symbols: List[str] = []
-    positions: List[Tuple[float, float, float]] = []
-    overlap_count = 0
-    tolerance_sq = (overlap_tolerance or 0.0) ** 2
-
-    for row_index, row in enumerate(grid.tiles):
-        for col_index, structure_id in enumerate(row):
-            atoms = tiles[structure_id]
-            shift = row_vec * row_index + col_vec * col_index
-            for symbol, pos in zip(
-                atoms.get_chemical_symbols(), atoms.get_positions()
-            ):
-                new_pos = (
-                    float(pos[0] + shift[0]),
-                    float(pos[1] + shift[1]),
-                    float(pos[2] + shift[2]),
-                )
-                if check_overlap:
-                    for existing in positions:
-                        dx = existing[0] - new_pos[0]
-                        dy = existing[1] - new_pos[1]
-                        dz = existing[2] - new_pos[2]
-                        if dx * dx + dy * dy + dz * dz <= tolerance_sq:
-                            overlap_count += 1
-                            break
-                positions.append(new_pos)
-                symbols.append(symbol)
-
-    if axis.row == "a":
-        out_a = base_a * grid.rows
-        out_b = base_b * grid.cols
-    else:
-        out_a = base_a * grid.cols
-        out_b = base_b * grid.rows
-
-    out_cell = base_cell.copy()
-    out_cell[0] = out_a
-    out_cell[1] = out_b
-
-    atoms_out = ASEAtoms(
-        symbols=symbols,
-        positions=positions,
-        cell=out_cell,
-        pbc=base_atoms.get_pbc(),
-    )
-    return atoms_out, overlap_count

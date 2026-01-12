@@ -84,15 +84,3 @@ def get_structure_bcif(
     if not entry:
         raise KeyError(structure_id)
     return cif_to_bcif(entry.cif, lossy=lossy, precision=precision)
-
-
-def get_structure_entry(structure_id: str) -> StoredStructure:
-    entry = _STORE.get(structure_id)
-    if not entry:
-        raise KeyError(structure_id)
-    return entry
-
-
-def register_structure_atoms(atoms: ASEAtoms, source: str) -> str:
-    cif = atoms_to_cif(atoms)
-    return _STORE.create(atoms=atoms, source=source, cif=cif)
