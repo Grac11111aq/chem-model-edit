@@ -90,8 +90,8 @@ def _cells_match(cell_a: Any, cell_b: Any, *, tol: float = 1.0e-6) -> bool:
         arr_b = cell_b.array
     except AttributeError:
         return False
-    for row_a, row_b in zip(arr_a, arr_b):
-        for value_a, value_b in zip(row_a, row_b):
+    for row_a, row_b in zip(arr_a, arr_b, strict=True):
+        for value_a, value_b in zip(row_a, row_b, strict=True):
             if abs(float(value_a) - float(value_b)) > tol:
                 return False
     return True

@@ -186,7 +186,7 @@ def build_supercell_from_grid(
             atoms = tiles[structure_id]
             shift = row_vec * row_index + col_vec * col_index
             for symbol, pos in zip(
-                atoms.get_chemical_symbols(), atoms.get_positions()
+                atoms.get_chemical_symbols(), atoms.get_positions(), strict=True
             ):
                 new_pos = (
                     float(pos[0] + shift[0]),
