@@ -205,11 +205,18 @@ export async function latticeParamsToVectors(params: {
   }>(response)
 }
 
-export async function parseZpeInput(content: string): Promise<ZPEParseResponse> {
+export async function parseZpeInput(
+  content: string,
+  structureId?: string | null,
+): Promise<ZPEParseResponse> {
+  const payload: { content: string; structure_id?: string } = { content }
+  if (structureId) {
+    payload.structure_id = structureId
+  }
   const response = await fetch(`${API_BASE}/calc/zpe/parse`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(payload),
   })
   return handleResponse<ZPEParseResponse>(response)
 }

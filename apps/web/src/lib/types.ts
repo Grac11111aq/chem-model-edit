@@ -50,6 +50,7 @@ export type ZPEJobRequest = {
   use_environ?: boolean
   input_dir?: string | null
   calc_mode?: 'new' | 'continue'
+  structure_id?: string | null
 }
 
 export type ZPEJobResponse = {

@@ -209,6 +209,7 @@ class SupercellResponse(BaseModel):
 
 class ZPEParseRequest(BaseModel):
     content: str
+    structure_id: Optional[str] = None
 
 
 class ZPEParseResponse(BaseModel):
@@ -224,6 +225,7 @@ class ZPEJobRequest(BaseModel):
     use_environ: bool = False
     input_dir: Optional[str] = None
     calc_mode: Literal["new", "continue"] = "continue"
+    structure_id: Optional[str] = None
 
 
 class ZPEJobResponse(BaseModel):

@@ -64,7 +64,13 @@ from services.zpe import (
     get_zpe_settings,
 )
 from services.zpe.enroll import get_enroll_store
-from services.zpe.parse import parse_atomic_species, parse_kpoints_automatic, parse_qe_structure
+from services.zpe.parse import (
+    extract_fixed_indices,
+    parse_atomic_species,
+    parse_kpoints_automatic,
+    parse_qe_atoms,
+    parse_qe_structure,
+)
 
 app = FastAPI(title="Chem Model API", version="0.1.0")
 logger = logging.getLogger(__name__)
@@ -341,7 +347,16 @@ def lattice_params_to_vectors(
 
 @app.post("/calc/zpe/parse", response_model=ZPEParseResponse)
 def zpe_parse(request: ZPEParseRequest) -> ZPEParseResponse:
-    structure, fixed_indices = parse_qe_structure(request.content)
+    if request.structure_id:
+        try:
+            structure = get_structure(request.structure_id)
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404, detail="Structure not found"
+            ) from exc
+        fixed_indices = extract_fixed_indices(request.content)
+    else:
+        structure, fixed_indices = parse_qe_structure(request.content)
     kpts = parse_kpoints_automatic(request.content)
     return ZPEParseResponse(
         structure=structure,
@@ -353,7 +368,22 @@ def zpe_parse(request: ZPEParseRequest) -> ZPEParseResponse:
 
 @app.post("/calc/zpe/jobs", response_model=ZPEJobResponse)
 def zpe_jobs(request: ZPEJobRequest) -> ZPEJobResponse:
-    structure, fixed_indices = parse_qe_structure(request.content)
+    if request.structure_id:
+        try:
+            structure = get_structure(request.structure_id)
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404, detail="Structure not found"
+            ) from exc
+        fixed_indices = extract_fixed_indices(request.content)
+        atoms = parse_qe_atoms(request.content)
+        if len(atoms) != len(structure.atoms):
+            raise HTTPException(
+                status_code=409,
+                detail="Structure does not match QE input atom count",
+            )
+    else:
+        structure, fixed_indices = parse_qe_structure(request.content)
     mobile_indices = ensure_mobile_indices(
         request.mobile_indices, len(structure.atoms), fixed_indices
     )

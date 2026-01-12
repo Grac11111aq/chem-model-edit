@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Viewer } from 'molstar/lib/apps/viewer/app'
 
+import { cn } from '@/lib/utils'
+
 type MolstarStructure = {
   id: string
   pdbText?: string
@@ -15,6 +17,10 @@ type MolstarViewerProps = {
   structures?: Array<MolstarStructure>
   onError?: (message: string) => void
   onLoad?: () => void
+  selectedAtomIndices?: Array<number>
+  disabledAtomIndices?: Array<number>
+  onAtomToggle?: (index: number) => void
+  className?: string
 }
 
 const hashString = (value: string) => {
@@ -38,6 +44,10 @@ export default function MolstarViewer({
   structures,
   onError,
   onLoad,
+  selectedAtomIndices,
+  disabledAtomIndices,
+  onAtomToggle,
+  className,
 }: MolstarViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
@@ -45,6 +55,18 @@ export default function MolstarViewer({
   const timerRef = useRef<number | null>(null)
   const activeRef = useRef(true)
   const abortRef = useRef<AbortController | null>(null)
+  const structureReadyRef = useRef<string | null>(null)
+  const selectionSignatureRef = useRef<string | null>(null)
+  const pendingSelectionRef = useRef<Array<number> | null>(null)
+  const latestSelectionRef = useRef<Array<number>>([])
+  const helpersRef = useRef<{
+    StructureElement: any
+    StructureProperties: any
+    Bond: any
+  } | null>(null)
+  const clickSubRef = useRef<{ unsubscribe: () => void } | null>(null)
+  const onAtomToggleRef = useRef<typeof onAtomToggle>(onAtomToggle)
+  const disabledSetRef = useRef<Set<number>>(new Set())
   const [viewerReady, setViewerReady] = useState(false)
 
   const normalizedStructures = useMemo<Array<MolstarStructure>>(() => {
@@ -78,14 +100,71 @@ export default function MolstarViewer({
       .join('::')
   }, [normalizedStructures])
 
+  const selectionEnabled = selectedAtomIndices !== undefined
+
+  const normalizedSelection = useMemo(() => {
+    if (!selectedAtomIndices || selectedAtomIndices.length === 0) {
+      return []
+    }
+    const disabledSet = new Set(disabledAtomIndices ?? [])
+    return Array.from(new Set(selectedAtomIndices))
+      .filter((index) => !disabledSet.has(index))
+      .sort((a, b) => a - b)
+  }, [selectedAtomIndices, disabledAtomIndices])
+
+  const selectionSignature = useMemo(
+    () => normalizedSelection.join(','),
+    [normalizedSelection],
+  )
+
+  useEffect(() => {
+    if (!selectionEnabled) {
+      return
+    }
+    latestSelectionRef.current = normalizedSelection
+  }, [normalizedSelection, selectionEnabled])
+
+  useEffect(() => {
+    onAtomToggleRef.current = onAtomToggle
+  }, [onAtomToggle])
+
+  useEffect(() => {
+    disabledSetRef.current = new Set(disabledAtomIndices ?? [])
+  }, [disabledAtomIndices])
+
+  const applySelection = (indices: Array<number>) => {
+    const viewer = viewerRef.current as any
+    if (!viewer || typeof viewer.structureInteractivity !== 'function') {
+      return
+    }
+    const disabledSet = disabledSetRef.current
+    const filtered =
+      disabledSet && disabledSet.size > 0
+        ? indices.filter((index) => !disabledSet.has(index))
+        : indices
+    viewer.structureInteractivity({ action: 'select' })
+    if (!filtered || filtered.length === 0) {
+      return
+    }
+    viewer.structureInteractivity({
+      action: 'select',
+      applyGranularity: false,
+      elements: {
+        items: filtered.map((index) => ({ atom_index: index })),
+      },
+    })
+  }
+
   const loadBallAndStick = async (
     viewer: Viewer,
     items: Array<MolstarStructure>,
+    loadSignature: string,
   ) => {
     const plugin = (viewer as unknown as { plugin: any }).plugin
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
+    structureReadyRef.current = null
     const isCancelled = () =>
       !activeRef.current || abortRef.current !== controller
     try {
@@ -191,6 +270,19 @@ export default function MolstarViewer({
         } else if (lastError) {
           onError?.(lastError)
         }
+        structureReadyRef.current = loadSignature
+        if (selectionEnabled) {
+          if (pendingSelectionRef.current) {
+            const selection = pendingSelectionRef.current
+            pendingSelectionRef.current = null
+            applySelection(selection)
+            selectionSignatureRef.current = selection.join(',')
+          } else {
+            applySelection(latestSelectionRef.current)
+            selectionSignatureRef.current =
+              latestSelectionRef.current.join(',')
+          }
+        }
         plugin.managers?.camera?.reset?.()
       }
     } finally {
@@ -203,6 +295,8 @@ export default function MolstarViewer({
   const clearViewer = async (viewer: Viewer) => {
     const plugin = (viewer as unknown as { plugin: any }).plugin
     await plugin.clear()
+    structureReadyRef.current = null
+    selectionSignatureRef.current = null
   }
 
   useEffect(() => {
@@ -246,6 +340,8 @@ export default function MolstarViewer({
       activeRef.current = false
       abortRef.current?.abort()
       abortRef.current = null
+      clickSubRef.current?.unsubscribe?.()
+      clickSubRef.current = null
       if (viewerRef.current) {
         viewerRef.current.dispose()
         viewerRef.current = null
@@ -276,11 +372,13 @@ export default function MolstarViewer({
       if (!viewerRef.current) {
         return
       }
-      void loadBallAndStick(viewerRef.current, normalizedStructures).then(
-        () => {
-          lastSignatureRef.current = signature
-        },
-      )
+      void loadBallAndStick(
+        viewerRef.current,
+        normalizedStructures,
+        signature,
+      ).then(() => {
+        lastSignatureRef.current = signature
+      })
     }, 150)
     return () => {
       if (timerRef.current) {
@@ -289,10 +387,111 @@ export default function MolstarViewer({
     }
   }, [normalizedStructures, signature, viewerReady])
 
+  useEffect(() => {
+    if (!viewerRef.current || !viewerReady) {
+      return
+    }
+    if (!selectionEnabled) {
+      return
+    }
+    if (structureReadyRef.current !== signature) {
+      pendingSelectionRef.current = normalizedSelection
+      return
+    }
+    if (selectionSignatureRef.current === selectionSignature) {
+      return
+    }
+    applySelection(normalizedSelection)
+    selectionSignatureRef.current = selectionSignature
+  }, [
+    normalizedSelection,
+    selectionSignature,
+    selectionEnabled,
+    signature,
+    viewerReady,
+  ])
+
+  useEffect(() => {
+    if (!viewerRef.current || !viewerReady) {
+      return
+    }
+    let cancelled = false
+    const plugin = (viewerRef.current as unknown as { plugin: any }).plugin
+    if (!plugin?.behaviors?.interaction?.click?.subscribe) {
+      return
+    }
+
+    const setup = async () => {
+      if (!helpersRef.current) {
+        const [
+          { StructureElement },
+          { StructureProperties },
+          { Bond },
+        ] = await Promise.all([
+          import('molstar/lib/mol-model/structure/structure/element'),
+          import('molstar/lib/mol-model/structure/structure/properties'),
+          import('molstar/lib/mol-model/structure/structure/unit/bonds'),
+        ])
+        helpersRef.current = { StructureElement, StructureProperties, Bond }
+      }
+      if (cancelled) {
+        return
+      }
+      clickSubRef.current?.unsubscribe?.()
+      clickSubRef.current = plugin.behaviors.interaction.click.subscribe(
+        (event: any) => {
+          const toggle = onAtomToggleRef.current
+          if (!toggle) {
+            return
+          }
+          const helpers = helpersRef.current
+          if (!helpers) {
+            return
+          }
+          const loci = event?.current?.loci
+          let elementLoci = loci
+          if (helpers.Bond?.isLoci?.(loci)) {
+            elementLoci = helpers.Bond.toFirstStructureElementLoci(loci)
+          }
+          if (!helpers.StructureElement?.Loci?.is?.(elementLoci)) {
+            return
+          }
+          const location =
+            helpers.StructureElement.Loci.getFirstLocation(elementLoci)
+          if (!location) {
+            return
+          }
+          const index = helpers.StructureProperties.atom.sourceIndex(location)
+          if (typeof index !== 'number' || Number.isNaN(index)) {
+            return
+          }
+          if (disabledSetRef.current?.has(index)) {
+            window.setTimeout(() => {
+              applySelection(latestSelectionRef.current)
+            }, 0)
+            return
+          }
+          toggle(index)
+        },
+      )
+    }
+
+    void setup()
+
+    return () => {
+      cancelled = true
+      clickSubRef.current?.unsubscribe?.()
+      clickSubRef.current = null
+    }
+  }, [viewerReady])
+
   return (
     <div
       ref={containerRef}
-      className="relative h-full w-full overflow-hidden rounded-xl border border-white/10"
+      className={cn(
+        'relative h-full w-full overflow-hidden rounded-xl border border-white/10',
+        className,
+      )}
     />
   )
 }
