@@ -77,7 +77,6 @@ Request:
     "validateLattice": "none"
   },
   "output": {
-    "register": true,
     "includeStructure": false
   }
 }
@@ -136,3 +135,4 @@ Missing base lattice (400):
 - tiles must be rectangular and match rows/cols.
 - structureId references the backend StructureRegistry (ASE Atoms).
 - When output.includeStructure=true, the response includes the Structure payload.
+- /supercell/build always registers the output structure and returns structureId.
