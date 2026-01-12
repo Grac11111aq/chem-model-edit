@@ -440,13 +440,13 @@ export function SupercellTool({
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {palette.map((entry) => {
+                {palette.map((entry, index) => {
                   const disabled = !entry.id
                   const isSelected = entry.id && brushId === entry.id
                   return (
                     <button
                       type="button"
-                      key={entry.label}
+                      key={entry.id ?? `palette-${entry.label}-${index}`}
                       disabled={disabled}
                       onClick={() => entry.id && setBrushId(entry.id)}
                       className={cn(
