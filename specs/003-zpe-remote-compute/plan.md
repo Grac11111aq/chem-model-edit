@@ -20,7 +20,7 @@ ZPE 計算を `control-plane`（API）と `compute-plane`（計算）に分離�
 
 ### Documentation (this feature)
 
-```
+```plaintext
 specs/003-zpe-remote-compute/
 ├── spec.md
 ├── plan.md
@@ -29,7 +29,7 @@ specs/003-zpe-remote-compute/
 
 ### Source Code (repository root)
 
-```
+```plaintext
 apps/api/
 ├── services/zpe/
 │   ├── backends.py      # 計算委譲アダプタ
