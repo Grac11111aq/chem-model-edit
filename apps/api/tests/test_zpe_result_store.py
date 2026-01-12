@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fakeredis
+import pytest
 
 from services.zpe.result_store import RedisResultStore
 
@@ -20,3 +21,20 @@ def test_redis_result_store_roundtrip():
     assert store.get_result("job-1") == result
     assert store.get_file("job-1", "summary") == "summary"
     assert store.get_file("job-1", "freqs") == "freqs"
+
+
+def test_redis_result_store_missing_keys():
+    fake = fakeredis.FakeRedis()
+    store = RedisResultStore(redis=fake)
+
+    with pytest.raises(KeyError):
+        store.get_status("missing")
+
+    with pytest.raises(KeyError):
+        store.get_result("missing")
+
+    with pytest.raises(KeyError):
+        store.get_file("missing", "summary")
+
+    with pytest.raises(ValueError):
+        store.get_file("job-1", "unknown")
