@@ -42,11 +42,11 @@ def _decode_dict(data: Dict[bytes, bytes]) -> Dict[str, str]:
 class ResultStore(ABC):
     @abstractmethod
     def set_status(self, job_id: str, status: str, detail: Optional[str] = None) -> None:
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     def get_status(self, job_id: str) -> ZPEJobStatus:
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     def set_result(
@@ -57,15 +57,15 @@ class ResultStore(ABC):
         summary_text: str,
         freqs_csv: str,
     ) -> None:
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     def get_result(self, job_id: str) -> Dict[str, Any]:
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     def get_file(self, job_id: str, kind: str) -> str:
-        raise NotImplementedError
+        ...
 
 
 class RedisResultStore(ResultStore):
@@ -119,7 +119,7 @@ class RedisResultStore(ResultStore):
         elif kind == "freqs":
             key = f"{_FREQS_PREFIX}{job_id}"
         else:
-            raise ValueError("kind は summary / freqs のいずれかです。")
+            raise ValueError("kind must be 'summary' or 'freqs'.")
         raw = cast(Optional[bytes], self.redis.get(key))
         if raw is None:
             raise KeyError("file not found")
@@ -129,5 +129,5 @@ class RedisResultStore(ResultStore):
 def get_result_store() -> ResultStore:
     settings = get_zpe_settings()
     if settings.result_store != "redis":
-        raise ValueError("result_store は redis のみ対応しています。")
+        raise ValueError("result_store must be 'redis'.")
     return RedisResultStore()
