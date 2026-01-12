@@ -166,7 +166,6 @@ class SupercellBuildOptions(BaseModel):
 
 
 class SupercellBuildOutput(BaseModel):
-    register: bool = True
     includeStructure: bool = False
 
 
