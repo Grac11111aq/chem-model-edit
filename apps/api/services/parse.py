@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from io import StringIO
 import re
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Tuple
 
 from ase import Atoms as ASEAtoms
 from ase.io import read as ase_read
@@ -11,14 +11,32 @@ from pymatgen.io.pwscf import PWInput
 from models import Atom, Lattice, Structure, Vector3
 
 
-def _from_ase(content: str) -> Structure:
+def _ase_atoms_from_content(content: str) -> ASEAtoms:
     atoms_result = ase_read(StringIO(content), format="espresso-in")
     if isinstance(atoms_result, list):
         if not atoms_result:
             raise ValueError("ASEが構造を返しませんでした。")
-        atoms_obj: ASEAtoms = atoms_result[0]
-    else:
-        atoms_obj = atoms_result
+        return atoms_result[0]
+    return atoms_result
+
+
+def _pymatgen_atoms_from_content(content: str) -> ASEAtoms:
+    pw_input = PWInput.from_str(content)
+    structure = pw_input.structure
+    symbols = [
+        getattr(site.specie, "symbol", str(site.specie))
+        for site in structure.sites
+    ]
+    positions = [site.coords for site in structure.sites]
+    return ASEAtoms(
+        symbols=symbols,
+        positions=positions,
+        cell=structure.lattice.matrix.tolist(),
+        pbc=True,
+    )
+
+
+def structure_from_ase(atoms_obj: ASEAtoms) -> Structure:
     symbols = atoms_obj.get_chemical_symbols()
     positions = atoms_obj.get_positions()
     parsed: List[Atom] = []
@@ -28,21 +46,14 @@ def _from_ase(content: str) -> Structure:
     return Structure(atoms=parsed, lattice=lattice)
 
 
+def _from_ase(content: str) -> Structure:
+    atoms_obj = _ase_atoms_from_content(content)
+    return structure_from_ase(atoms_obj)
+
+
 def _from_pymatgen(content: str) -> Structure:
-    pw_input = PWInput.from_str(content)
-    structure = pw_input.structure
-    parsed: List[Atom] = []
-    for site in structure.sites:
-        parsed.append(
-            Atom(
-                symbol=str(site.specie),
-                x=float(site.coords[0]),
-                y=float(site.coords[1]),
-                z=float(site.coords[2]),
-            )
-        )
-    lattice = _lattice_from_vectors(structure.lattice.matrix.tolist())
-    return Structure(atoms=parsed, lattice=lattice)
+    atoms_obj = _pymatgen_atoms_from_content(content)
+    return structure_from_ase(atoms_obj)
 
 
 _POSITION_ANY = re.compile(r"^\s*ATOMIC_POSITIONS\b", re.IGNORECASE | re.MULTILINE)
@@ -72,6 +83,20 @@ def parse_qe_in(content: str) -> Structure:
     except Exception as ase_error:  # pragma: no cover - fallback path varies
         try:
             return _from_pymatgen(content)
+        except Exception as pmg_error:
+            raise ValueError(
+                f"QE .in のパースに失敗しました: ASE={ase_error}, pymatgen={pmg_error}"
+            ) from pmg_error
+
+
+def parse_qe_atoms(content: str) -> Tuple[ASEAtoms, str]:
+    if not _POSITION_ANY.search(content):
+        raise ValueError("構造データではありません。")
+    try:
+        return _ase_atoms_from_content(content), "ase"
+    except Exception as ase_error:  # pragma: no cover - fallback path varies
+        try:
+            return _pymatgen_atoms_from_content(content), "pymatgen"
         except Exception as pmg_error:
             raise ValueError(
                 f"QE .in のパースに失敗しました: ASE={ase_error}, pymatgen={pmg_error}"

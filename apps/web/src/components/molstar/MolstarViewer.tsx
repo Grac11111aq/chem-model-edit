@@ -3,14 +3,18 @@ import type { Viewer } from 'molstar/lib/apps/viewer/app'
 
 type MolstarStructure = {
   id: string
-  pdbText: string
+  pdbText?: string
+  bcifUrl?: string
   opacity?: number
   visible?: boolean
 }
 
 type MolstarViewerProps = {
   pdbText?: string
+  bcifUrl?: string
   structures?: Array<MolstarStructure>
+  onError?: (message: string) => void
+  onLoad?: () => void
 }
 
 const hashString = (value: string) => {
@@ -30,24 +34,31 @@ const signatureForText = (value: string) => {
 
 export default function MolstarViewer({
   pdbText,
+  bcifUrl,
   structures,
+  onError,
+  onLoad,
 }: MolstarViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
   const lastSignatureRef = useRef<string | null>(null)
   const timerRef = useRef<number | null>(null)
   const activeRef = useRef(true)
+  const abortRef = useRef<AbortController | null>(null)
   const [viewerReady, setViewerReady] = useState(false)
 
   const normalizedStructures = useMemo<Array<MolstarStructure>>(() => {
     if (structures && structures.length > 0) {
       return structures
     }
+    if (bcifUrl) {
+      return [{ id: 'single', bcifUrl, opacity: 1, visible: true }]
+    }
     if (pdbText) {
       return [{ id: 'single', pdbText, opacity: 1, visible: true }]
     }
     return []
-  }, [pdbText, structures])
+  }, [bcifUrl, pdbText, structures])
 
   const signature = useMemo(() => {
     if (normalizedStructures.length === 0) {
@@ -57,9 +68,12 @@ export default function MolstarViewer({
       .map((structure) => {
         const opacity = structure.opacity ?? 1
         const visible = structure.visible ?? true
-        return `${structure.id}|${opacity}|${visible}|${signatureForText(
-          structure.pdbText,
-        )}`
+        const payloadSignature = structure.bcifUrl
+          ? `bcif:${structure.bcifUrl}`
+          : structure.pdbText
+            ? `pdb:${signatureForText(structure.pdbText)}`
+            : 'empty'
+        return `${structure.id}|${opacity}|${visible}|${payloadSignature}`
       })
       .join('::')
   }, [normalizedStructures])
@@ -69,39 +83,121 @@ export default function MolstarViewer({
     items: Array<MolstarStructure>,
   ) => {
     const plugin = (viewer as unknown as { plugin: any }).plugin
-    await plugin.clear()
-    for (const item of items) {
-      if (!item.pdbText || item.visible === false) {
-        continue
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    const isCancelled = () =>
+      !activeRef.current || abortRef.current !== controller
+    try {
+      if (isCancelled()) {
+        return
       }
-      const data = await plugin.builders.data.rawData(
-        { data: item.pdbText },
-        { state: { isGhost: true } },
-      )
-      const trajectory = await plugin.builders.structure.parseTrajectory(
-        data,
-        'pdb',
-      )
-      const model = await plugin.builders.structure.createModel(trajectory)
-      const structure = await plugin.builders.structure.createStructure(model)
-      const component =
-        await plugin.builders.structure.tryCreateComponentStatic(
-          structure,
-          'all',
-        )
-      if (component) {
-        const opacity = Math.min(1, Math.max(0, item.opacity ?? 1))
-        await plugin.builders.structure.representation.addRepresentation(
-          component,
-          {
-            type: 'ball-and-stick',
-            color: 'element-symbol',
-            typeParams: { alpha: opacity },
-          },
-        )
+      await plugin.clear()
+      let loadedCount = 0
+      let lastError: string | null = null
+      for (const item of items) {
+        if (isCancelled()) {
+          break
+        }
+        if (item.visible === false) {
+          continue
+        }
+        try {
+          let data = null
+          let format: 'pdb' | 'bcif' = 'pdb'
+          if (item.bcifUrl) {
+            const response = await fetch(item.bcifUrl, {
+              signal: controller.signal,
+            })
+            if (!response.ok) {
+              lastError = `BCIF fetch failed (HTTP ${response.status})`
+              console.error('Mol* bcif 取得に失敗しました。', response.status)
+              continue
+            }
+            if (isCancelled()) {
+              break
+            }
+            const buffer = await response.arrayBuffer()
+            if (isCancelled()) {
+              break
+            }
+            data = await plugin.builders.data.rawData(
+              { data: new Uint8Array(buffer) },
+              { state: { isGhost: true } },
+            )
+            format = 'bcif'
+          } else if (item.pdbText) {
+            data = await plugin.builders.data.rawData(
+              { data: item.pdbText },
+              { state: { isGhost: true } },
+            )
+            format = 'pdb'
+          }
+
+          if (!data) {
+            lastError = 'No structure data was provided.'
+            continue
+          }
+
+          const trajectory = await plugin.builders.structure.parseTrajectory(
+            data,
+            format,
+          )
+          if (isCancelled()) {
+            break
+          }
+          const model = await plugin.builders.structure.createModel(trajectory)
+          if (isCancelled()) {
+            break
+          }
+          const structure = await plugin.builders.structure.createStructure(
+            model,
+          )
+          if (isCancelled()) {
+            break
+          }
+          const component =
+            await plugin.builders.structure.tryCreateComponentStatic(
+              structure,
+              'all',
+            )
+          if (component) {
+            const opacity = Math.min(1, Math.max(0, item.opacity ?? 1))
+            await plugin.builders.structure.representation.addRepresentation(
+              component,
+              {
+                type: 'ball-and-stick',
+                color: 'element-symbol',
+                typeParams: { alpha: opacity },
+              },
+            )
+            loadedCount += 1
+          }
+        } catch (error) {
+          if (isCancelled()) {
+            break
+          }
+          const message =
+            error instanceof Error && error.message
+              ? error.message
+              : 'Mol* failed to render structure.'
+          lastError = message
+          console.error('Mol* Viewer load failed.', error)
+        }
+      }
+      if (activeRef.current && abortRef.current === controller) {
+        if (loadedCount > 0) {
+          onLoad?.()
+        } else if (lastError) {
+          onError?.(lastError)
+        }
+        plugin.managers?.camera?.reset?.()
+      }
+    } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null
       }
     }
-    plugin.managers?.camera?.reset?.()
   }
 
   const clearViewer = async (viewer: Viewer) => {
@@ -121,6 +217,8 @@ export default function MolstarViewer({
       try {
         await import('molstar/lib/mol-plugin-ui/skin/light.scss')
         const { Viewer } = await import('molstar/lib/apps/viewer/app')
+        const { CifCoreProvider } =
+          await import('molstar/lib/mol-plugin-state/formats/trajectory')
         const viewer = await Viewer.create(container, {
           layoutIsExpanded: false,
           layoutShowControls: false,
@@ -131,6 +229,7 @@ export default function MolstarViewer({
           viewportShowExpand: false,
           viewportShowControls: false,
           backgroundColor: 0x0b1120,
+          customFormats: [['bcif', CifCoreProvider]],
         })
         if (!activeRef.current) {
           viewer.dispose()
@@ -145,6 +244,8 @@ export default function MolstarViewer({
 
     return () => {
       activeRef.current = false
+      abortRef.current?.abort()
+      abortRef.current = null
       if (viewerRef.current) {
         viewerRef.current.dispose()
         viewerRef.current = null

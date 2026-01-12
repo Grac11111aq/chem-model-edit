@@ -51,6 +51,17 @@ class ParseResponse(BaseModel):
     structure: Structure
 
 
+class StructureCreateRequest(BaseModel):
+    content: str
+    format: Optional[str] = None
+
+
+class StructureCreateResponse(BaseModel):
+    structure_id: str
+    structure: Structure
+    source: str
+
+
 class ExportRequest(BaseModel):
     structure: Structure
     format: Optional[str] = None

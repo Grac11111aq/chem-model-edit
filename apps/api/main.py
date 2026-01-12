@@ -20,6 +20,8 @@ from models import (
     LatticeConvertResponse,
     ParseRequest,
     ParseResponse,
+    StructureCreateRequest,
+    StructureCreateResponse,
     SupercellRequest,
     SupercellResponse,
     TiledSupercellRequest,
@@ -38,6 +40,7 @@ from models import (
 from services.export import export_qe_in
 from services.lattice import params_to_vectors, vectors_to_params
 from services.parse import parse_qe_in
+from services.structures import create_structure_from_qe, get_structure_bcif
 from services.supercell import generate_supercell, generate_tiled_supercell
 from services.transplant import transplant_delta
 from services.zpe import (
@@ -119,6 +122,38 @@ def health() -> dict[str, str]:
 def parse_qe(request: ParseRequest) -> ParseResponse:
     structure = parse_qe_in(request.content)
     return ParseResponse(structure=structure)
+
+
+@app.post("/structures", response_model=StructureCreateResponse)
+def create_structure(request: StructureCreateRequest) -> StructureCreateResponse:
+    structure_id, structure, source = create_structure_from_qe(request.content)
+    return StructureCreateResponse(
+        structure_id=structure_id,
+        structure=structure,
+        source=source,
+    )
+
+
+@app.get("/structures/{structure_id}/view")
+def view_structure(
+    structure_id: str,
+    format: str = Query("bcif"),
+    lossy: int = Query(0, ge=0, le=1),
+    precision: int = Query(3, ge=0),
+) -> Response:
+    if format != "bcif":
+        raise HTTPException(status_code=400, detail="Unsupported format")
+
+    try:
+        bcif = get_structure_bcif(
+            structure_id,
+            lossy=lossy == 1,
+            precision=precision if lossy == 1 else None,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Structure not found") from exc
+
+    return Response(content=bcif, media_type="application/x-bcif")
 
 
 @app.post("/export", response_model=ExportResponse)

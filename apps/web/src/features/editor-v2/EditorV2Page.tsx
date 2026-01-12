@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
-import type { DockviewApi, DockviewReadyEvent, IDockviewPanelProps } from 'dockview-react'
+import type {
+  DockviewApi,
+  DockviewReadyEvent,
+  IDockviewPanelProps,
+} from 'dockview-react'
 import { DockviewReact } from 'dockview-react'
 import {
   Activity,
@@ -12,49 +16,81 @@ import {
   Plus,
   Search,
   Settings,
-  X,
   UserCircle,
+  X,
 } from 'lucide-react'
 
-import type { ToolMode, WorkspaceFile } from './types'
 import { FilePanel } from './components/FilePanel'
 import { ToolPanel } from './components/ToolPanel'
 import 'dockview/dist/styles/dockview.css'
-import { parseQeInput } from '@/lib/api'
-import { atomsToPdb } from '@/lib/pdb'
 
-const INITIAL_FILES: WorkspaceFile[] = []
+import type { ToolMode, WorkspaceFile } from './types'
+import { createStructureFromQe, structureViewUrl } from '@/lib/api'
 
-const TOOL_NAV: Array<{ id: ToolMode; label: string; icon: ReactNode }> =
-  [
-    {
-      id: 'transfer',
-      label: 'Transfer',
-      icon: <ArrowLeftRight />,
-    },
-    {
-      id: 'supercell',
-      label: 'Supercell',
-      icon: <Grid3x3 />,
-    },
-    {
-      id: 'vibration',
-      label: 'Vibrations',
-      icon: <Activity />,
-    },
-  ]
+type ImportFailure = {
+  id: string
+  name: string
+  message: string
+}
+
+type FilePanelStatus = 'visible' | 'open' | 'closed'
+
+const INITIAL_FILES: Array<WorkspaceFile> = []
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024
+const ALLOWED_EXTENSIONS = ['.in']
+
+const TOOL_NAV: Array<{ id: ToolMode; label: string; icon: ReactNode }> = [
+  {
+    id: 'transfer',
+    label: 'Transfer',
+    icon: <ArrowLeftRight />,
+  },
+  {
+    id: 'supercell',
+    label: 'Supercell',
+    icon: <Grid3x3 />,
+  },
+  {
+    id: 'vibration',
+    label: 'Vibrations',
+    icon: <Activity />,
+  },
+]
 
 const FILE_PANEL_PREFIX = 'file'
 const TOOL_PANEL_PREFIX = 'tool'
 const filePanelId = (id: string) => `${FILE_PANEL_PREFIX}-${id}`
 const toolPanelId = (id: ToolMode) => `${TOOL_PANEL_PREFIX}-${id}`
-const MAX_IMPORT_BYTES = 5 * 1024 * 1024
-
-type FilePanelStatus = 'visible' | 'open' | 'closed'
+const TOOL_MODE_IDS = new Set<ToolMode>(TOOL_NAV.map((tool) => tool.id))
+const isToolMode = (value: unknown): value is ToolMode =>
+  typeof value === 'string' && TOOL_MODE_IDS.has(value as ToolMode)
+const createImportId = () => {
+  if (typeof globalThis.crypto.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID()
+  }
+  return `import-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+const validateImportFile = (file: File): string | null => {
+  const lowerName = file.name.toLowerCase()
+  const hasAllowedExtension = ALLOWED_EXTENSIONS.some((ext) =>
+    lowerName.endsWith(ext),
+  )
+  if (!hasAllowedExtension) {
+    return 'Unsupported file type.'
+  }
+  if (file.size > MAX_IMPORT_BYTES) {
+    return `File too large. Max ${Math.round(MAX_IMPORT_BYTES / (1024 * 1024))}MB.`
+  }
+  return null
+}
 
 export default function EditorV2Page() {
-  const [files, setFiles] = useState<WorkspaceFile[]>(() => [...INITIAL_FILES])
-  const [importFailures, setImportFailures] = useState<string[]>([])
+  const [files, setFiles] = useState<Array<WorkspaceFile>>(() => [
+    ...INITIAL_FILES,
+  ])
+  const [importFailures, setImportFailures] = useState<Array<ImportFailure>>(
+    [],
+  )
   const [isImporting, setIsImporting] = useState(false)
   const [importProgress, setImportProgress] = useState<{
     total: number
@@ -64,6 +100,9 @@ export default function EditorV2Page() {
   const [pendingOpenFileId, setPendingOpenFileId] = useState<string | null>(
     null,
   )
+  const [pendingOpenTool, setPendingOpenTool] = useState<ToolMode | null>(null)
+  const [isDockviewReady, setIsDockviewReady] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
   const [dockviewVersion, setDockviewVersion] = useState(0)
   const dockviewApiRef = useRef<DockviewApi | null>(null)
   const disposablesRef = useRef<Array<{ dispose: () => void }>>([])
@@ -94,107 +133,118 @@ export default function EditorV2Page() {
     return next
   }, [files, dockviewVersion])
 
-  const openFile = useCallback((id: string) => {
-    const api = dockviewApiRef.current
-    const file = filesById.get(id)
-    if (!api || !file) {
-      return
-    }
-    const panelId = filePanelId(id)
-    const existing = api.getPanel(panelId)
-    if (existing) {
-      existing.api.setActive()
-      bumpDockviewVersion()
-      return
-    }
-    api.addPanel({
-      id: panelId,
-      title: file.name,
-      component: 'structure',
-      params: { fileId: id },
-    })
-    bumpDockviewVersion()
-  }, [bumpDockviewVersion, filesById])
-
-  const openTool = useCallback((mode: ToolMode) => {
-    const api = dockviewApiRef.current
-    if (!api) {
-      return
-    }
-    const panelId = toolPanelId(mode)
-    const existing = api.getPanel(panelId)
-    if (existing) {
-      existing.api.setActive()
-      bumpDockviewVersion()
-      return
-    }
-    api.addPanel({
-      id: panelId,
-      title: TOOL_NAV.find((tool) => tool.id === mode)?.label ?? mode,
-      component: 'tool',
-      params: { mode },
-    })
-    bumpDockviewVersion()
-  }, [bumpDockviewVersion])
-
-  const handleReady = useCallback((event: DockviewReadyEvent) => {
-    disposablesRef.current.forEach((disposable) => disposable.dispose())
-    disposablesRef.current = []
-
-    const api = event.api
-    dockviewApiRef.current = api
-
-    disposablesRef.current = [
-      api.onDidActivePanelChange((panel) => {
-        if (!panel) {
-          setActiveTool(null)
-          bumpDockviewVersion()
-          return
-        }
-        if (panel.id.startsWith(`${FILE_PANEL_PREFIX}-`)) {
-          setActiveTool(null)
-          bumpDockviewVersion()
-          return
-        }
-        if (panel.id.startsWith(`${TOOL_PANEL_PREFIX}-`)) {
-          const raw = panel.id.replace(`${TOOL_PANEL_PREFIX}-`, '')
-          const mode =
-            raw === 'transfer' || raw === 'supercell' || raw === 'vibration'
-              ? (raw as ToolMode)
-              : null
-          setActiveTool(mode)
-          bumpDockviewVersion()
-          return
-        }
-        setActiveTool(null)
-        bumpDockviewVersion()
-      }),
-    ]
-    if (typeof api.onDidAddPanel === 'function') {
-      disposablesRef.current.push(api.onDidAddPanel(() => bumpDockviewVersion()))
-    }
-    if (typeof api.onDidRemovePanel === 'function') {
-      disposablesRef.current.push(api.onDidRemovePanel(() => bumpDockviewVersion()))
-    }
-
-    if (pendingOpenFileId && filesById.has(pendingOpenFileId)) {
-      openFile(pendingOpenFileId)
-      setPendingOpenFileId(null)
-    }
-
-    requestAnimationFrame(() => {
-      const container = dockviewContainerRef.current
-      if (container) {
-        api.layout(container.clientWidth, container.clientHeight, true)
+  const openFile = useCallback(
+    (id: string): boolean => {
+      const api = dockviewApiRef.current
+      const file = filesById.get(id)
+      if (!api || !file) {
+        return false
       }
-    })
-  }, [bumpDockviewVersion, filesById, openFile, pendingOpenFileId])
+      const panelId = filePanelId(id)
+      const existing = api.getPanel(panelId)
+      if (existing) {
+        existing.api.setActive()
+        bumpDockviewVersion()
+        return true
+      }
+      api.addPanel({
+        id: panelId,
+        title: file.name,
+        component: 'structure',
+        params: { fileId: id },
+      })
+      bumpDockviewVersion()
+      return true
+    },
+    [bumpDockviewVersion, filesById],
+  )
+
+  const openTool = useCallback(
+    (mode: ToolMode): boolean => {
+      const api = dockviewApiRef.current
+      if (!api) {
+        return false
+      }
+      const panelId = toolPanelId(mode)
+      const existing = api.getPanel(panelId)
+      if (existing) {
+        existing.api.setActive()
+        bumpDockviewVersion()
+        return true
+      }
+      api.addPanel({
+        id: panelId,
+        title: TOOL_NAV.find((tool) => tool.id === mode)?.label ?? mode,
+        component: 'tool',
+        params: { mode },
+      })
+      bumpDockviewVersion()
+      return true
+    },
+    [bumpDockviewVersion],
+  )
+
+  const handleReady = useCallback(
+    (event: DockviewReadyEvent) => {
+      disposablesRef.current.forEach((disposable) => disposable.dispose())
+      disposablesRef.current = []
+
+      const api = event.api
+      dockviewApiRef.current = api
+      setIsDockviewReady(true)
+
+      disposablesRef.current = [
+        api.onDidActivePanelChange((panel) => {
+          if (!panel) {
+            setActiveTool(null)
+            bumpDockviewVersion()
+            return
+          }
+          if (panel.id.startsWith(`${FILE_PANEL_PREFIX}-`)) {
+            setActiveTool(null)
+            bumpDockviewVersion()
+            return
+          }
+          if (panel.id.startsWith(`${TOOL_PANEL_PREFIX}-`)) {
+            const raw = panel.id.replace(`${TOOL_PANEL_PREFIX}-`, '')
+            const mode = isToolMode(raw) ? raw : null
+            setActiveTool(mode)
+            bumpDockviewVersion()
+            return
+          }
+          setActiveTool(null)
+          bumpDockviewVersion()
+        }),
+      ]
+      if (typeof api.onDidAddPanel === 'function') {
+        disposablesRef.current.push(
+          api.onDidAddPanel(() => bumpDockviewVersion()),
+        )
+      }
+      if (typeof api.onDidRemovePanel === 'function') {
+        disposablesRef.current.push(
+          api.onDidRemovePanel(() => bumpDockviewVersion()),
+        )
+      }
+
+      if (pendingOpenFileId && filesById.has(pendingOpenFileId)) {
+        openFile(pendingOpenFileId)
+        setPendingOpenFileId(null)
+      }
+
+      requestAnimationFrame(() => {
+        const container = dockviewContainerRef.current
+        if (container) {
+          api.layout(container.clientWidth, container.clientHeight, true)
+        }
+      })
+    },
+    [bumpDockviewVersion, filesById, openFile, pendingOpenFileId],
+  )
 
   const dockviewComponents = useMemo(
     () => ({
-      structure: ({
-        params,
-      }: IDockviewPanelProps<{ fileId: string }>) => {
+      structure: ({ params }: IDockviewPanelProps<{ fileId: string }>) => {
         const file = params?.fileId ? filesById.get(params.fileId) : null
         if (!file) {
           return (
@@ -215,7 +265,8 @@ export default function EditorV2Page() {
         params,
         api,
       }: IDockviewPanelProps<{ mode: ToolMode }>) => {
-        if (!params?.mode) {
+        const mode = params?.mode
+        if (!isToolMode(mode)) {
           return (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
               <div className="flex flex-col items-center gap-2 rounded-md border border-dashed border-slate-200 bg-white/70 px-4 py-3 text-xs">
@@ -233,7 +284,7 @@ export default function EditorV2Page() {
         }
         return (
           <ToolPanel
-            mode={params.mode}
+            mode={mode}
             onClose={() => api.close()}
             variant="dock"
             showClose={false}
@@ -246,50 +297,71 @@ export default function EditorV2Page() {
     [filesById],
   )
 
-  const handleImportFile = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const input = event.currentTarget
-      const fileList = Array.from(input.files ?? [])
+  const importFiles = useCallback(
+    async (fileList: Array<File>) => {
       if (fileList.length === 0) {
         return
       }
       setIsImporting(true)
       setImportProgress({ total: fileList.length, done: 0 })
-      const nextFiles: WorkspaceFile[] = []
-      const failedFiles: string[] = []
+      const nextFiles: Array<WorkspaceFile> = []
+      const failedFiles: Array<ImportFailure> = []
       let firstImportedId: string | null = null
       let doneCount = 0
       try {
         for (const file of fileList) {
+          const validationError = validateImportFile(file)
+          if (validationError) {
+            failedFiles.push({
+              id: createImportId(),
+              name: file.name,
+              message: validationError,
+            })
+            doneCount += 1
+            setImportProgress({ total: fileList.length, done: doneCount })
+            continue
+          }
           try {
-            if (file.size > MAX_IMPORT_BYTES) {
-              throw new Error(`File too large (${file.size} bytes)`)
-            }
             const content = await file.text()
-            const structure = await parseQeInput(content)
+            const { structure, structure_id, source } =
+              await createStructureFromQe(content)
             const baseName = file.name.replace(/\.[^/.]+$/, '') || file.name
-            const id = `import-${Date.now()}-${Math.random()
-              .toString(36)
-              .slice(2, 8)}`
-            const pdbText =
-              structure.atoms.length > 0
-                ? atomsToPdb(structure.atoms)
-                : undefined
+            const id = createImportId()
+            const bcifUrl = structureViewUrl(structure_id, {
+              format: 'bcif',
+              lossy: false,
+              precision: 3,
+            })
             const nextFile: WorkspaceFile = {
               id,
               name: file.name,
               kind: 'in',
               label: baseName,
-              pdbText,
+              structureId: structure_id,
+              structure,
+              bcifUrl,
+              parseSource: source,
               initialOpenSections: { table: false, parameter: true },
             }
             nextFiles.push(nextFile)
+            if (import.meta.env.DEV) {
+              console.debug('[import] parsed', { source })
+            }
             if (!firstImportedId) {
               firstImportedId = id
             }
           } catch (err) {
-            failedFiles.push(file.name)
-            console.error(`Failed to import ${file.name}:`, err)
+            const message =
+              err instanceof Error && err.message ? err.message : String(err)
+            console.error('[import] failed to import file', {
+              name: file.name,
+              message,
+            })
+            failedFiles.push({
+              id: createImportId(),
+              name: file.name,
+              message,
+            })
           } finally {
             doneCount += 1
             setImportProgress({ total: fileList.length, done: doneCount })
@@ -299,23 +371,46 @@ export default function EditorV2Page() {
         if (nextFiles.length > 0) {
           setFiles((prev) => [...prev, ...nextFiles])
           if (firstImportedId) {
-            setPendingOpenFileId(firstImportedId)
+            if (isDockviewReady) {
+              if (!openFile(firstImportedId)) {
+                setPendingOpenFileId(firstImportedId)
+              }
+            } else {
+              setPendingOpenFileId(firstImportedId)
+            }
           }
         }
 
         if (failedFiles.length > 0) {
           setImportFailures((prev) => {
-            const merged = new Set([...prev, ...failedFiles])
-            return Array.from(merged)
+            const merged = new Map(
+              prev.map((item) => [`${item.name}:${item.message}`, item]),
+            )
+            for (const failure of failedFiles) {
+              merged.set(`${failure.name}:${failure.message}`, failure)
+            }
+            return Array.from(merged.values())
           })
         }
       } finally {
         setIsImporting(false)
         setImportProgress(null)
+      }
+    },
+    [isDockviewReady, openFile],
+  )
+
+  const handleImportFile = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const input = event.currentTarget
+      const fileList = Array.from(input.files ?? [])
+      try {
+        await importFiles(fileList)
+      } finally {
         input.value = ''
       }
     },
-    [],
+    [importFiles],
   )
 
   useEffect(() => {
@@ -328,24 +423,31 @@ export default function EditorV2Page() {
     if (!dockviewApiRef.current) {
       return
     }
-    openFile(pendingOpenFileId)
-    setPendingOpenFileId(null)
+    if (openFile(pendingOpenFileId)) {
+      setPendingOpenFileId(null)
+    }
   }, [filesById, openFile, pendingOpenFileId])
+
+  useEffect(() => {
+    if (!pendingOpenTool || !isDockviewReady) {
+      return
+    }
+    if (openTool(pendingOpenTool)) {
+      setPendingOpenTool(null)
+    }
+  }, [isDockviewReady, openTool, pendingOpenTool])
 
   useEffect(() => {
     const container = dockviewContainerRef.current
     if (!container) {
-      return () => {
-        disposablesRef.current.forEach((disposable) => disposable.dispose())
-        disposablesRef.current = []
-      }
+      return
     }
 
     const observer = new ResizeObserver((entries) => {
-      const entry = entries[0]
-      if (!entry) {
+      if (entries.length === 0) {
         return
       }
+      const entry = entries[0]
       const api = dockviewApiRef.current
       if (!api) {
         return
@@ -356,6 +458,11 @@ export default function EditorV2Page() {
 
     return () => {
       observer.disconnect()
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
       disposablesRef.current.forEach((disposable) => disposable.dispose())
       disposablesRef.current = []
     }
@@ -372,8 +479,8 @@ export default function EditorV2Page() {
       <aside className="z-20 flex w-16 flex-shrink-0 flex-col items-center gap-6 border-r border-border bg-slate-50 py-4">
         <button
           type="button"
-          className="rounded-md p-2 transition-colors hover:bg-slate-200"
           aria-label="Open menu"
+          className="rounded-md p-2 transition-colors hover:bg-slate-200"
         >
           <Menu className="h-6 w-6 text-slate-700" />
         </button>
@@ -386,7 +493,9 @@ export default function EditorV2Page() {
               label={item.label}
               onClick={() => {
                 setActiveTool(item.id)
-                openTool(item.id)
+                if (!openTool(item.id)) {
+                  setPendingOpenTool(item.id)
+                }
               }}
               isActive={activeTool === item.id}
             />
@@ -421,8 +530,8 @@ export default function EditorV2Page() {
 
           <button
             type="button"
+            aria-label="Open user menu"
             className="rounded-full p-1.5 transition-colors hover:bg-slate-100"
-            aria-label="User menu"
           >
             <UserCircle className="h-8 w-8 text-slate-600" />
           </button>
@@ -431,7 +540,9 @@ export default function EditorV2Page() {
         <div className="flex flex-1 overflow-hidden">
           <div className="flex w-64 flex-col border-r border-border bg-slate-50/50">
             <div className="border-b border-border bg-white p-4">
-              <h2 className="text-sm font-semibold text-slate-900">Structures</h2>
+              <h2 className="text-sm font-semibold text-slate-900">
+                Structures
+              </h2>
             </div>
 
             <div className="flex-1 space-y-1 overflow-y-auto p-3">
@@ -499,9 +610,26 @@ export default function EditorV2Page() {
                 </div>
               ) : null}
 
-              <div className="m-2 rounded-lg border border-slate-200 bg-white/60 px-4 py-6 text-center">
+              <div
+                className={`m-2 rounded-lg border-2 border-dashed px-4 py-8 text-center transition-colors ${
+                  isDragOver
+                    ? 'border-blue-400 bg-blue-50'
+                    : 'border-slate-200 bg-slate-50/50'
+                }`}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'copy'
+                }}
+                onDragEnter={() => setIsDragOver(true)}
+                onDragLeave={() => setIsDragOver(false)}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  setIsDragOver(false)
+                  void importFiles(Array.from(event.dataTransfer.files))
+                }}
+              >
                 <p className="text-xs text-muted-foreground">
-                  Use “Import Files” below to add .in files.
+                  Drag files here to import
                 </p>
               </div>
             </div>
@@ -520,21 +648,28 @@ export default function EditorV2Page() {
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {importFailures.map((name) => (
+                    {importFailures.map((failure) => (
                       <span
-                        key={name}
-                        className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[11px] text-red-600 shadow-sm"
+                        key={failure.id}
+                        className="inline-flex items-start gap-2 rounded-lg bg-white px-2 py-1 text-[11px] text-red-600 shadow-sm"
                       >
-                        <span className="max-w-[140px] truncate">{name}</span>
+                        <span className="flex min-w-0 flex-col">
+                          <span className="max-w-[140px] truncate">
+                            {failure.name}
+                          </span>
+                          <span className="max-w-[180px] truncate text-[10px] text-red-500/80">
+                            {failure.message}
+                          </span>
+                        </span>
                         <button
                           type="button"
                           onClick={() =>
                             setImportFailures((prev) =>
-                              prev.filter((item) => item !== name),
+                              prev.filter((item) => item.id !== failure.id),
                             )
                           }
                           className="rounded-full p-0.5 text-red-400 transition-colors hover:bg-red-100 hover:text-red-600"
-                          aria-label={`Remove ${name}`}
+                          aria-label={`Remove ${failure.name}`}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -563,7 +698,7 @@ export default function EditorV2Page() {
             </div>
           </div>
 
-          <main className="flex-1 overflow-hidden bg-slate-100/50 p-4 min-h-0">
+          <main className="flex-1 min-h-0 overflow-hidden bg-slate-100/50 p-4">
             <div
               ref={dockviewContainerRef}
               className="relative h-full w-full min-h-0"
@@ -592,6 +727,11 @@ export default function EditorV2Page() {
 }
 
 function HistoryPanel() {
+  const items = [
+    'benzen.in → transfer',
+    'h2o.in → supercell',
+    'phenol.in → draft',
+  ]
   return (
     <div className="flex h-full flex-col gap-4 bg-white p-4 text-sm text-slate-700">
       <div className="flex items-center justify-between">
@@ -604,22 +744,22 @@ function HistoryPanel() {
           </p>
         </div>
         <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500">
-          3 items
+          {items.length} items
         </span>
       </div>
       <div className="flex-1 space-y-3 overflow-y-auto">
-        {['benzen.in → transfer', 'h2o.in → supercell', 'phenol.in → draft'].map(
-          (item, index) => (
-            <div
-              key={`${item}-${index}`}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
-            >
-              <p className="text-xs font-medium text-slate-600">Step {index + 1}</p>
-              <p className="text-sm text-slate-800">{item}</p>
-              <p className="text-[10px] text-slate-400">Pending review</p>
-            </div>
-          ),
-        )}
+        {items.map((item, index) => (
+          <div
+            key={`${item}-${index}`}
+            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+          >
+            <p className="text-xs font-medium text-slate-600">
+              Step {index + 1}
+            </p>
+            <p className="text-sm text-slate-800">{item}</p>
+            <p className="text-[10px] text-slate-400">Pending review</p>
+          </div>
+        ))}
       </div>
       <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs text-slate-400">
         Drag a panel to link lineage
@@ -639,8 +779,8 @@ function NavItem({ icon, label, onClick, isActive }: NavItemProps) {
   return (
     <button
       type="button"
-      onClick={onClick}
       aria-label={label}
+      onClick={onClick}
       className="group flex w-full flex-col items-center gap-1 px-2"
     >
       <div
