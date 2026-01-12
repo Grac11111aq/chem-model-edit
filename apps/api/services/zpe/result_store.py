@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
@@ -38,13 +39,16 @@ def _decode_dict(data: Dict[bytes, bytes]) -> Dict[str, str]:
     return {k.decode("utf-8"): v.decode("utf-8") for k, v in data.items()}
 
 
-class ResultStore:
+class ResultStore(ABC):
+    @abstractmethod
     def set_status(self, job_id: str, status: str, detail: Optional[str] = None) -> None:
         raise NotImplementedError
 
+    @abstractmethod
     def get_status(self, job_id: str) -> ZPEJobStatus:
         raise NotImplementedError
 
+    @abstractmethod
     def set_result(
         self,
         job_id: str,
@@ -55,9 +59,11 @@ class ResultStore:
     ) -> None:
         raise NotImplementedError
 
+    @abstractmethod
     def get_result(self, job_id: str) -> Dict[str, Any]:
         raise NotImplementedError
 
+    @abstractmethod
     def get_file(self, job_id: str, kind: str) -> str:
         raise NotImplementedError
 
