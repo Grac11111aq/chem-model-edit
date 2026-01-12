@@ -105,7 +105,6 @@ export type SupercellBuildOptions = {
 }
 
 export type SupercellBuildOutput = {
-  register?: boolean
   includeStructure?: boolean
 }
 
