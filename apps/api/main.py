@@ -35,6 +35,7 @@ from models import (
     ZPEJobStatusResponse,
     ZPEComputeRegisterRequest,
     ZPEComputeRegisterResponse,
+    ZPEComputeRevokeResponse,
     ZPEEnrollTokenRequest,
     ZPEEnrollTokenResponse,
     ZPEParseRequest,
@@ -64,6 +65,7 @@ from services.zpe import (
     get_zpe_settings,
 )
 from services.zpe.enroll import get_enroll_store
+from services.zpe.worker_auth import get_worker_token_store
 from services.zpe.parse import (
     extract_fixed_indices,
     parse_atomic_species,
@@ -429,11 +431,30 @@ def zpe_compute_register(
         )
     except KeyError as exc:
         raise HTTPException(status_code=400, detail="invalid enroll token") from exc
+    token_store = get_worker_token_store()
+    worker_token = token_store.create_token(registration.server_id, label=request.name)
     return ZPEComputeRegisterResponse(
         server_id=registration.server_id,
         registered_at=registration.registered_at,
         name=registration.name,
+        worker_token=worker_token.token,
+        token_expires_at=worker_token.expires_at,
+        token_ttl_seconds=worker_token.ttl_seconds,
     )
+
+
+@app.delete(
+    "/calc/zpe/compute/servers/{server_id}",
+    response_model=ZPEComputeRevokeResponse,
+)
+def zpe_compute_revoke(
+    server_id: str,
+    raw: Request,
+) -> ZPEComputeRevokeResponse:
+    require_admin(raw)
+    token_store = get_worker_token_store()
+    revoked = token_store.revoke_tokens_for_worker(server_id)
+    return ZPEComputeRevokeResponse(revoked_count=revoked)
 @app.get("/calc/zpe/jobs/{job_id}", response_model=ZPEJobStatusResponse)
 def zpe_job_status(job_id: str) -> ZPEJobStatusResponse:
     store = get_result_store()
