@@ -40,6 +40,8 @@ def lease_next_job(worker_id: str) -> Optional[Lease]:
     redis = get_redis_connection()
     store = get_result_store()
 
+    _reap_expired_leases(redis, store)
+
     lease_id = uuid4().hex
     expires_at = _now() + timedelta(seconds=settings.lease_ttl_seconds)
     expires_iso = expires_at.isoformat()
@@ -91,6 +93,24 @@ def lease_next_job(worker_id: str) -> Optional[Lease]:
         lease_id=lease_id,
         lease_ttl_seconds=settings.lease_ttl_seconds,
     )
+
+
+def _reap_expired_leases(redis: Redis, store: Any) -> None:
+    now_ts = int(_now().timestamp())
+    expired = redis.zrangebyscore(_LEASE_INDEX, 0, now_ts)
+    if not expired:
+        return
+    for job_id_raw in expired:
+        job_id = job_id_raw.decode("utf-8") if isinstance(job_id_raw, bytes) else str(job_id_raw)
+        lease_key = f"{_LEASE_PREFIX}{job_id}"
+        lease = redis.hgetall(lease_key)
+        if not lease:
+            redis.zrem(_LEASE_INDEX, job_id)
+            continue
+        redis.delete(lease_key)
+        redis.zrem(_LEASE_INDEX, job_id)
+        redis.lpush(_QUEUE_KEY, job_id)
+        store.set_status(job_id, "queued", detail="lease expired")
 
 
 def get_lease_store(redis: Optional[Redis] = None) -> Redis:
