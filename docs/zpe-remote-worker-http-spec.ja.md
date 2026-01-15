@@ -63,7 +63,7 @@
 - `zpe:token:{token_hash}`: HASH（worker_id/expires_at/revoked_at/label）
 - `zpe:revoked_tokens`: SET（token_hash）
 - TTL:
-  - `zpe:lease:{job_id}`: `lease_ttl_seconds`
+  - `zpe:lease:{job_id}`: **TTLは使わず** `zpe:lease:index` に期限を集約
   - `zpe:payload:{job_id}`: `result_ttl_seconds` と同等（完了後に削除も可）
   - `zpe:result/summary/freqs/status`: `result_ttl_seconds`
 
@@ -93,8 +93,8 @@
   - ジョブがある場合: `{ job_id, payload, lease_id, lease_ttl_seconds }`
   - ない場合: 204 No Content
 - **lease取得は原子的に行う**:
-  - Luaスクリプト等で `RPOP zpe:queue` → `SET zpe:lease:{job_id} NX EX` を1回で実行
-  - 成功時に `zpe:lease:index` に `expires_at` を登録
+  - Luaスクリプト等で `RPOP zpe:queue` → `HSET zpe:lease:{job_id}` を1回で実行
+  - 成功時に `zpe:lease:index` に `expires_at` を登録（**TTLは使わない**）
 - **lease_id**:
   - job取得時にランダム生成し `zpe:lease:{job_id}` に保存
   - **結果/失敗報告時の正当性検証**と **冪等性**に使用
@@ -144,6 +144,7 @@
 ### 6. 期限切れ処理（最小）
 - **検知**: control-plane側で **定期リーパー**（例: 30秒周期）を実行
   - `zpe:lease:index` の期限切れを取得し、該当jobを再投入
+  - `zpe:lease:{job_id}` が存在しない場合は **indexから除去してスキップ**
 - **再投入**:
   - `zpe:retry_count:{job_id}` をインクリメント
   - **バックオフ**: `delay = min(300, 10 * 2^retry)` 秒
