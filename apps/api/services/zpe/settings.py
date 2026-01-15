@@ -55,6 +55,9 @@ class ZPESettings(BaseSettings):
     job_timeout_seconds: int = 86400
     result_ttl_seconds: int = 604800
     lease_ttl_seconds: int = 600
+    retry_max: int = 3
+    retry_base_delay_seconds: int = 10
+    retry_max_delay_seconds: int = 300
 
     environ_path: Optional[str] = None
 

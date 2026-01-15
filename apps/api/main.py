@@ -37,6 +37,10 @@ from models import (
     ZPEComputeRegisterResponse,
     ZPEComputeRevokeResponse,
     ZPEComputeLeaseResponse,
+    ZPEComputeResultRequest,
+    ZPEComputeResultResponse,
+    ZPEComputeFailedRequest,
+    ZPEComputeFailedResponse,
     ZPEEnrollTokenRequest,
     ZPEEnrollTokenResponse,
     ZPEParseRequest,
@@ -67,6 +71,7 @@ from services.zpe import (
 )
 from services.zpe.enroll import get_enroll_store
 from services.zpe.lease import lease_next_job
+from services.zpe.compute_results import submit_failure, submit_result
 from services.zpe.worker_auth import get_worker_token_store
 from services.zpe.parse import (
     extract_fixed_indices,
@@ -494,6 +499,59 @@ def zpe_compute_lease(raw: Request) -> Response:
         payload=lease.payload,
         lease_id=lease.lease_id,
         lease_ttl_seconds=lease.lease_ttl_seconds,
+    )
+
+
+@app.post(
+    "/calc/zpe/compute/jobs/{job_id}/result",
+    response_model=ZPEComputeResultResponse,
+)
+def zpe_compute_result(
+    job_id: str,
+    request: ZPEComputeResultRequest,
+    raw: Request,
+) -> ZPEComputeResultResponse:
+    worker_id = require_worker(raw)
+    try:
+        outcome = submit_result(
+            job_id=job_id,
+            worker_id=worker_id,
+            lease_id=request.lease_id,
+            result=request.result,
+            summary_text=request.summary_text,
+            freqs_csv=request.freqs_csv,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return ZPEComputeResultResponse(idempotent=outcome.idempotent)
+
+
+@app.post(
+    "/calc/zpe/compute/jobs/{job_id}/failed",
+    response_model=ZPEComputeFailedResponse,
+)
+def zpe_compute_failed(
+    job_id: str,
+    request: ZPEComputeFailedRequest,
+    raw: Request,
+) -> ZPEComputeFailedResponse:
+    worker_id = require_worker(raw)
+    try:
+        outcome = submit_failure(
+            job_id=job_id,
+            worker_id=worker_id,
+            lease_id=request.lease_id,
+            error_code=request.error_code,
+            error_message=request.error_message,
+            traceback=request.traceback,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return ZPEComputeFailedResponse(
+        requeued=outcome.requeued,
+        retry_count=outcome.retry_count,
     )
 @app.get("/calc/zpe/jobs/{job_id}", response_model=ZPEJobStatusResponse)
 def zpe_job_status(job_id: str) -> ZPEJobStatusResponse:

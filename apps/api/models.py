@@ -300,3 +300,29 @@ class ZPEComputeLeaseResponse(BaseModel):
     payload: Dict[str, Any]
     lease_id: str
     lease_ttl_seconds: int
+
+
+class ZPEComputeResultRequest(BaseModel):
+    lease_id: str
+    result: Dict[str, Any]
+    summary_text: str
+    freqs_csv: str
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ZPEComputeResultResponse(BaseModel):
+    ok: bool = True
+    idempotent: bool = False
+
+
+class ZPEComputeFailedRequest(BaseModel):
+    lease_id: str
+    error_code: str
+    error_message: str
+    traceback: Optional[str] = None
+
+
+class ZPEComputeFailedResponse(BaseModel):
+    ok: bool = True
+    requeued: bool
+    retry_count: int

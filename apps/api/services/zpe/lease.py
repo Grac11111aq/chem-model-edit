@@ -17,6 +17,7 @@ _QUEUE_KEY = "zpe:queue"
 _PAYLOAD_PREFIX = "zpe:payload:"
 _LEASE_PREFIX = "zpe:lease:"
 _LEASE_INDEX = "zpe:lease:index"
+_DELAY_ZSET = "zpe:delay"
 
 
 def _now() -> datetime:
@@ -41,6 +42,7 @@ def lease_next_job(worker_id: str) -> Optional[Lease]:
     store = get_result_store()
 
     _reap_expired_leases(redis, store)
+    _promote_due_jobs(redis)
 
     lease_id = uuid4().hex
     expires_at = _now() + timedelta(seconds=settings.lease_ttl_seconds)
@@ -111,6 +113,18 @@ def _reap_expired_leases(redis: Redis, store: Any) -> None:
         redis.zrem(_LEASE_INDEX, job_id)
         redis.lpush(_QUEUE_KEY, job_id)
         store.set_status(job_id, "queued", detail="lease expired")
+
+
+def _promote_due_jobs(redis: Redis) -> None:
+    now_ts = int(_now().timestamp())
+    due = redis.zrangebyscore(_DELAY_ZSET, 0, now_ts)
+    if not due:
+        return
+    pipe = redis.pipeline(transaction=True)
+    for job_id in due:
+        pipe.lpush(_QUEUE_KEY, job_id)
+    pipe.zrem(_DELAY_ZSET, *due)
+    pipe.execute()
 
 
 def get_lease_store(redis: Optional[Redis] = None) -> Redis:
