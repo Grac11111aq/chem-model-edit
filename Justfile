@@ -155,6 +155,11 @@ dev:
   pnpm -C apps/web dev --port "$web_port" &
   wait
 
+zpe-worker:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  ./scripts/run-zpe-worker.sh
+
 api-test:
   #!/usr/bin/env bash
   set -euo pipefail

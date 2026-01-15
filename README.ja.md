@@ -32,6 +32,7 @@ Quantum ESPRESSO `.in` の構造を可視化・編集するWebアプリ。
 
 ## セットアップ
 詳細は `docs/setup.ja.md` を参照。
+ZPE の compute-plane（worker）セットアップは `docs/zpe-worker-setup.ja.md` を参照。
 ```bash
 git clone git@github.com:Grac11111aq/chem-model-edit.git
 cd chem-model-edit

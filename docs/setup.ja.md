@@ -2,6 +2,7 @@
 
 `chem-model-edit` のローカル開発環境を整える手順です。
 Quantum ESPRESSO (QE) の実行環境は **不要** です。
+ZPE の compute-plane（worker）セットアップは `docs/zpe-worker-setup.ja.md` を参照してください。
 
 ## 前提
 - Git

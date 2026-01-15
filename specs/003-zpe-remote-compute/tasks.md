@@ -26,3 +26,9 @@
 - [ ] T220 [P] [US1/2] Redis ストアの単体テスト
 - [ ] T221 [US3] モックモードのAPIテスト
 - [ ] T222 [P] [US1/2/3] pytest / mypy / ruff 実行
+
+## Phase 4: Docs & Ops
+
+- [x] T230 [P] [US1/2] compute-plane セットアップガイドと env テンプレート整備
+- [x] T231 [P] [US1] worker 起動スクリプト（+ just レシピ）追加
+- [x] T232 [P] [US1/2] README / setup ガイドの導線追加
