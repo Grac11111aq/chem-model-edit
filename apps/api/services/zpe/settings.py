@@ -35,6 +35,7 @@ class ZPESettings(BaseSettings):
     worker_mode: Literal["qe", "mock"] = "qe"
     admin_token: Optional[str] = None
     enroll_token_ttl_seconds: int = 3600
+    worker_token_ttl_seconds: int = 604800
 
     pw_command: str = "pw.x"
     pw_path: Optional[str] = None

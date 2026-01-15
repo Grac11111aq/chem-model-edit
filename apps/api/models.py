@@ -286,3 +286,10 @@ class ZPEComputeRegisterResponse(BaseModel):
     server_id: str
     registered_at: str
     name: Optional[str] = None
+    worker_token: str
+    token_expires_at: str
+    token_ttl_seconds: int
+
+
+class ZPEComputeRevokeResponse(BaseModel):
+    revoked_count: int
