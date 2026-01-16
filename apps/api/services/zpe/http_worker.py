@@ -157,7 +157,6 @@ def run_http_worker() -> None:
             time.sleep(poll_interval)
             continue
 
-        payload["job_id"] = job_id
         start = time.monotonic()
         try:
             artifacts = compute_zpe_artifacts(payload, job_id=job_id)
