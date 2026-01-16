@@ -5,8 +5,8 @@ control-plane（FastAPI）はジョブ投入のみを行い、QE 計算は compu
 
 ## 構成
 - **control-plane**: FastAPI API（Cloud Run など）
-- **compute-plane**: RQ worker（別マシン）
-- **共有ストア**: Redis（公開運用時は TLS/ACL）
+- **compute-plane**: HTTP worker（別マシン）
+- **共有ストア**: Redis（control-plane のみが接続）
 
 ## 秘密情報の境界
 - **Admin token** は control-plane のみで保持
@@ -16,7 +16,7 @@ control-plane（FastAPI）はジョブ投入のみを行い、QE 計算は compu
 - Python >= 3.13（`uv` 使用）
 - Quantum ESPRESSO（`pw.x`）が利用可能
 - Pseudopotential ディレクトリ
-- Redis に到達可能
+- control-plane へ HTTPS で到達可能
 
 ## リポジトリと Python 環境
 ```bash
@@ -35,11 +35,11 @@ control-plane と compute-plane を分離します。
 - compute-plane: `apps/api/.env.compute.example`
 
 ### Control-plane（FastAPI）
-remote-queue 用の最小例:
+remote-http 用の最小例:
 ```bash
 ZPE_REDIS_URL=redis://localhost:6379/0
 ZPE_QUEUE_NAME=zpe
-ZPE_COMPUTE_MODE=remote-queue
+ZPE_COMPUTE_MODE=remote-http
 ZPE_RESULT_STORE=redis
 ZPE_ADMIN_TOKEN=change-me
 ```
@@ -47,8 +47,8 @@ ZPE_ADMIN_TOKEN=change-me
 ### Compute-plane（worker）
 QE 実行に必要な最小例:
 ```bash
-ZPE_REDIS_URL=redis://localhost:6379/0
-ZPE_QUEUE_NAME=zpe
+ZPE_CONTROL_API_URL=http://localhost:8000
+ZPE_WORKER_TOKEN=change-me
 ZPE_PSEUDO_DIR=/path/to/pseudo
 ZPE_PW_PATH=/path/to/pw.x
 ```
@@ -85,6 +85,11 @@ curl -X POST http://localhost:8000/calc/zpe/compute/servers/register \
 ./scripts/run-zpe-worker.sh
 ```
 
+HTTP ワーカーの場合:
+```bash
+./scripts/run-zpe-http-worker.sh
+```
+
 特定の env ファイルを指定する場合:
 ```bash
 ZPE_ENV_FILE=apps/api/.env.compute ./scripts/run-zpe-worker.sh
@@ -93,6 +98,11 @@ ZPE_ENV_FILE=apps/api/.env.compute ./scripts/run-zpe-worker.sh
 `just` を使う場合:
 ```bash
 just zpe-worker
+```
+
+HTTP ワーカーの場合:
+```bash
+just zpe-http-worker
 ```
 
 起動時に `uv sync` も実行する場合:
