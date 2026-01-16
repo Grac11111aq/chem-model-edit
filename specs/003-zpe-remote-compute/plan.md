@@ -5,13 +5,13 @@
 
 ## Summary
 
-ZPE 計算を `control-plane`（API）と `compute-plane`（計算）に分離し、サービス提供側では計算が走らない構成にする。ジョブは Redis/RQ で計算サーバーに委譲し、結果は共有ストア（初期は Redis）で受け渡す。E2E/CI 向けにモック計算モードも提供する。
+ZPE 計算を `control-plane`（API）と `compute-plane`（計算）に分離し、サービス提供側では計算が走らない構成にする。ジョブは **HTTP 仲介（remote-http）** でワーカーがポーリングし、結果は control-plane が共有ストア（初期は Redis）へ保存する。E2E/CI 向けにモック計算モードも提供する。
 
 ## Technical Context
 
 - **Language/Version**: Python 3.13
 - **Primary Dependencies**: FastAPI, RQ, redis-py, pydantic-settings
-- **Result Store**: Public Redis + TLS + ACL（将来 S3 へ差し替え可能な設計）
+- **Result Store**: control-plane のみが接続する Redis（将来 S3 へ差し替え可能な設計）
 - **Testing**: pytest（モックバックエンド + ストアのユニットテスト）
 - **Target Platform**: API: 任意のクラウド / Compute: 計算サーバー
 - **Constraints**: API 側は `pw.x` や pseudo を持たない前提
@@ -48,11 +48,16 @@ apps/api/
    - 短期登録トークン方式（将来のユーザー単位登録へ拡張）を設計
    - 結果ストアとバックエンドのインターフェース定義
 2. **Core Implementation**
-   - `remote-queue`（RQ + Redis）バックエンド
-   - `mock` バックエンド（決定論的なダミー結果）
+   - Job enqueue API（`remote-http` backend）
+   - ワーカー認証（worker_token）と登録/失効 API
+   - Lease 取得 API と期限切れ処理
+   - 結果返却/失敗返却 API
+   - Retry/backoff/DLQ の最小実装
+   - HTTP ワーカーポーリング実装
+   - `remote-queue` / `mock` バックエンド（互換性維持）
    - 結果保存/取得の統一（Redis）
 3. **Verification**
-   - 共有ストア経由の結果取得テスト
+   - HTTP 仲介経由の結果取得テスト
    - モックモードのE2E向け検証
 
 ## Observability (MVP)
@@ -71,6 +76,7 @@ apps/api/
 - compute-plane ワーカーを停止する
 - `/calc/zpe/*` の挙動を従来のローカル方式に戻す
 - Redis 側のジョブ/結果はそのまま残す（必要に応じて手動削除）
+- **in-flight ジョブ**: 新規受付停止 → 実行中ジョブは完了待ち（または強制停止してDLQへ退避）
 - 段階的切替やデータクリーンアップの詳細手順は運用が固まってから追記する
 - **運用ガードレール（Planned）**
   - 新規 remote 受付を止めるフラグ/トグル（既存ジョブは継続 or 明示キャンセル）
