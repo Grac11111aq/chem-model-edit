@@ -5,8 +5,8 @@ The control-plane (FastAPI) only enqueues jobs and never runs QE locally.
 
 ## Architecture
 - **Control-plane**: FastAPI API on Cloud Run (or any host)
-- **Compute-plane**: RQ worker on a separate machine
-- **Shared store**: Redis (TLS/ACL if public)
+- **Compute-plane**: HTTP worker on a separate machine
+- **Shared store**: Redis (control-plane only)
 
 ## Secret boundary
 - **Admin token** stays in the control-plane only.
@@ -16,7 +16,7 @@ The control-plane (FastAPI) only enqueues jobs and never runs QE locally.
 - Python >= 3.13 with `uv`
 - Quantum ESPRESSO (`pw.x`) installed
 - Pseudopotential directory
-- Redis reachable from the compute machine
+- Reachable control-plane over HTTPS
 
 ## Repo + Python env
 ```bash
@@ -34,11 +34,11 @@ Use separate env files for control-plane and compute-plane.
 - Compute-plane example: `apps/api/.env.compute.example`
 
 ### Control-plane (FastAPI)
-Minimal config for remote-queue:
+Minimal config for remote-http:
 ```bash
 ZPE_REDIS_URL=redis://localhost:6379/0
 ZPE_QUEUE_NAME=zpe
-ZPE_COMPUTE_MODE=remote-queue
+ZPE_COMPUTE_MODE=remote-http
 ZPE_RESULT_STORE=redis
 ZPE_ADMIN_TOKEN=change-me
 ```
@@ -46,8 +46,8 @@ ZPE_ADMIN_TOKEN=change-me
 ### Compute-plane (worker)
 Minimal config for QE execution:
 ```bash
-ZPE_REDIS_URL=redis://localhost:6379/0
-ZPE_QUEUE_NAME=zpe
+ZPE_CONTROL_API_URL=http://localhost:8000
+ZPE_WORKER_TOKEN=change-me
 ZPE_PSEUDO_DIR=/path/to/pseudo
 ZPE_PW_PATH=/path/to/pw.x
 ```
@@ -84,6 +84,11 @@ A helper script is provided:
 ./scripts/run-zpe-worker.sh
 ```
 
+For HTTP worker:
+```bash
+./scripts/run-zpe-http-worker.sh
+```
+
 You can point it to a specific env file:
 ```bash
 ZPE_ENV_FILE=apps/api/.env.compute ./scripts/run-zpe-worker.sh
@@ -92,6 +97,11 @@ ZPE_ENV_FILE=apps/api/.env.compute ./scripts/run-zpe-worker.sh
 If you use `just`:
 ```bash
 just zpe-worker
+```
+
+For HTTP worker:
+```bash
+just zpe-http-worker
 ```
 
 If you need to run `uv sync` at startup, set:

@@ -160,6 +160,11 @@ zpe-worker:
   set -euo pipefail
   ./scripts/run-zpe-worker.sh
 
+zpe-http-worker:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  ./scripts/run-zpe-http-worker.sh
+
 api-test:
   #!/usr/bin/env bash
   set -euo pipefail
