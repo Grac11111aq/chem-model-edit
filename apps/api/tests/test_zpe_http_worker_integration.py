@@ -99,10 +99,9 @@ def test_http_worker_success(monkeypatch, tmp_path):
     try:
         lease = http_worker._lease_job(base_url, handler_cls.token, timeout=5)
         assert lease is not None
-
-            artifacts = zpe_worker.compute_zpe_artifacts(lease["payload"], job_id=lease["job_id"])
-            http_worker._submit_result(
-                base_url,
+        artifacts = zpe_worker.compute_zpe_artifacts(lease["payload"], job_id=lease["job_id"])
+        http_worker._submit_result(
+            base_url,
             handler_cls.token,
             lease["job_id"],
             lease["lease_id"],
