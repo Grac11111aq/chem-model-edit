@@ -1,0 +1,26 @@
+&control
+  calculation='scf'
+  prefix='h2'
+  outdir='calc_scratch'
+  tprnfor=.true.
+/
+&system
+  ibrav=0
+  nat=2
+  ntyp=1
+  ecutwfc=30
+/
+&electrons
+  conv_thr=1.0d-8
+/
+ATOMIC_SPECIES
+H 1.00794 H.pbe-rrkjus.UPF
+CELL_PARAMETERS angstrom
+10.0 0.0 0.0
+0.0 10.0 0.0
+0.0 0.0 10.0
+ATOMIC_POSITIONS angstrom
+H 0.0 0.0 0.0 1 1 1
+H 0.0 0.0 0.74 1 1 1
+K_POINTS (automatic)
+1 1 1 0 0 0
