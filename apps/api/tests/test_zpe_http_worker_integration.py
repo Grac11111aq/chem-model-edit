@@ -10,80 +10,84 @@ from services.zpe import worker as zpe_worker
 from services.zpe.settings import ZPESettings
 
 
-class _LeaseHandler(BaseHTTPRequestHandler):
-    token = "token"
-    job_id = "job-1"
-    lease_id = "lease-1"
-    leased = False
-    result_payload: Dict[str, Any] | None = None
-    failed_payload: Dict[str, Any] | None = None
+def _make_handler() -> type[BaseHTTPRequestHandler]:
+    class _LeaseHandler(BaseHTTPRequestHandler):
+        token = "test-token"  # noqa: S105
+        job_id = "job-1"
+        lease_id = "lease-1"
+        leased = False
+        result_payload: Dict[str, Any] | None = None
+        failed_payload: Dict[str, Any] | None = None
 
-    def _send_json(self, status: int, payload: Dict[str, Any] | None = None) -> None:
-        self.send_response(status)
-        if payload is not None:
-            body = json.dumps(payload).encode("utf-8")
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-        else:
-            self.end_headers()
+        def _send_json(self, status: int, payload: Dict[str, Any] | None = None) -> None:
+            self.send_response(status)
+            if payload is not None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.end_headers()
 
-    def _auth_ok(self) -> bool:
-        auth = self.headers.get("Authorization")
-        return auth == f"Bearer {self.token}"
+        def _auth_ok(self) -> bool:
+            auth = self.headers.get("Authorization")
+            return auth == f"Bearer {self.token}"
 
-    def do_POST(self) -> None:  # noqa: N802
-        if not self._auth_ok():
-            self._send_json(401, {"detail": "unauthorized"})
-            return
-
-        if self.path == "/calc/zpe/compute/jobs/lease":
-            if self.leased:
-                self._send_json(204)
+        def do_POST(self) -> None:
+            if not self._auth_ok():
+                self._send_json(401, {"detail": "unauthorized"})
                 return
-            self.leased = True
-            payload = {
-                "job_id": self.job_id,
-                "lease_id": self.lease_id,
-                "lease_ttl_seconds": 30,
-                "payload": {
-                    "content": "&control\n/\nATOMIC_POSITIONS angstrom\nH 0 0 0 1 1 1",
-                    "mobile_indices": [0],
-                    "use_environ": False,
-                    "calc_mode": "continue",
-                },
-            }
-            self._send_json(200, payload)
-            return
 
-        if self.path == f"/calc/zpe/compute/jobs/{self.job_id}/result":
-            length = int(self.headers.get("Content-Length", "0"))
-            body = self.rfile.read(length).decode("utf-8") if length else "{}"
-            self.result_payload = json.loads(body)
-            self._send_json(200, {"ok": True})
-            return
+            if self.path == "/calc/zpe/compute/jobs/lease":
+                if self.leased:
+                    self._send_json(204)
+                    return
+                self.leased = True
+                payload = {
+                    "job_id": self.job_id,
+                    "lease_id": self.lease_id,
+                    "lease_ttl_seconds": 30,
+                    "payload": {
+                        "content": "&control\n/\nATOMIC_POSITIONS angstrom\nH 0 0 0 1 1 1",
+                        "mobile_indices": [0],
+                        "use_environ": False,
+                        "calc_mode": "continue",
+                    },
+                }
+                self._send_json(200, payload)
+                return
 
-        if self.path == f"/calc/zpe/compute/jobs/{self.job_id}/failed":
-            length = int(self.headers.get("Content-Length", "0"))
-            body = self.rfile.read(length).decode("utf-8") if length else "{}"
-            self.failed_payload = json.loads(body)
-            self._send_json(200, {"ok": True})
-            return
+            if self.path == f"/calc/zpe/compute/jobs/{self.job_id}/result":
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length).decode("utf-8") if length else "{}"
+                self.result_payload = json.loads(body)
+                self._send_json(200, {"ok": True})
+                return
 
-        self._send_json(404, {"detail": "not found"})
+            if self.path == f"/calc/zpe/compute/jobs/{self.job_id}/failed":
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length).decode("utf-8") if length else "{}"
+                self.failed_payload = json.loads(body)
+                self._send_json(200, {"ok": True})
+                return
+
+            self._send_json(404, {"detail": "not found"})
+
+    return _LeaseHandler
 
 
-def _start_server(handler_cls: type[_LeaseHandler]) -> tuple[HTTPServer, str]:
+def _start_server() -> tuple[HTTPServer, str, type[BaseHTTPRequestHandler]]:
+    handler_cls = _make_handler()
     server = HTTPServer(("127.0.0.1", 0), handler_cls)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     host, port = server.server_address
-    return server, f"http://{host}:{port}"
+    return server, f"http://{host}:{port}", handler_cls
 
 
 def test_http_worker_success(monkeypatch, tmp_path):
-    server, base_url = _start_server(_LeaseHandler)
+    server, base_url, handler_cls = _start_server()
 
     settings = ZPESettings(
         worker_mode="mock",
@@ -93,13 +97,13 @@ def test_http_worker_success(monkeypatch, tmp_path):
     monkeypatch.setattr(zpe_worker, "get_zpe_settings", lambda: settings)
 
     try:
-        lease = http_worker._lease_job(base_url, _LeaseHandler.token, timeout=5)
+        lease = http_worker._lease_job(base_url, handler_cls.token, timeout=5)
         assert lease is not None
 
-        artifacts = zpe_worker.compute_zpe_artifacts(lease["payload"], job_id=lease["job_id"])
-        http_worker._submit_result(
-            base_url,
-            _LeaseHandler.token,
+            artifacts = zpe_worker.compute_zpe_artifacts(lease["payload"], job_id=lease["job_id"])
+            http_worker._submit_result(
+                base_url,
+            handler_cls.token,
             lease["job_id"],
             lease["lease_id"],
             artifacts.result,
@@ -111,12 +115,12 @@ def test_http_worker_success(monkeypatch, tmp_path):
     finally:
         server.shutdown()
 
-    assert _LeaseHandler.result_payload is not None
-    assert _LeaseHandler.result_payload["lease_id"] == _LeaseHandler.lease_id
+    assert handler_cls.result_payload is not None
+    assert handler_cls.result_payload["lease_id"] == handler_cls.lease_id
 
 
 def test_http_worker_failed(monkeypatch, tmp_path):
-    server, base_url = _start_server(_LeaseHandler)
+    server, base_url, handler_cls = _start_server()
 
     settings = ZPESettings(
         worker_mode="mock",
@@ -126,11 +130,11 @@ def test_http_worker_failed(monkeypatch, tmp_path):
     monkeypatch.setattr(zpe_worker, "get_zpe_settings", lambda: settings)
 
     try:
-        lease = http_worker._lease_job(base_url, _LeaseHandler.token, timeout=5)
+        lease = http_worker._lease_job(base_url, handler_cls.token, timeout=5)
         assert lease is not None
         http_worker._submit_failed(
             base_url,
-            _LeaseHandler.token,
+            handler_cls.token,
             lease["job_id"],
             lease["lease_id"],
             "TEST_ERROR",
@@ -141,5 +145,5 @@ def test_http_worker_failed(monkeypatch, tmp_path):
     finally:
         server.shutdown()
 
-    assert _LeaseHandler.failed_payload is not None
-    assert _LeaseHandler.failed_payload["error_code"] == "TEST_ERROR"
+    assert handler_cls.failed_payload is not None
+    assert handler_cls.failed_payload["error_code"] == "TEST_ERROR"
