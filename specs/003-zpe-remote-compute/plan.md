@@ -60,6 +60,17 @@ apps/api/
    - HTTP 仲介経由の結果取得テスト
    - モックモードのE2E向け検証
 
+### E2E 検証手順（MVP）
+
+詳細は `docs/zpe-worker-setup.ja.md` に集約し、ここでは作業の流れを固定する。
+
+1. control-plane を `ZPE_COMPUTE_MODE=remote-http` で起動（Redis は control-plane のみが接続）
+2. enroll token を発行して worker を登録し、worker_token を取得
+3. compute-plane で `scripts/run-zpe-http-worker.sh` を起動
+4. `samples/qe-in/h2_zpe.in` を `scripts/zpe-submit-h2.py` で送信
+5. `/calc/zpe/jobs/{job_id}` と `/result` `/files` の取得を確認
+6. 追加の軽量検証は `ZPE_COMPUTE_MODE=mock` を使用
+
 ## Observability (MVP)
 
 - control-plane は job_id とステータス遷移、RedisError をログに残す

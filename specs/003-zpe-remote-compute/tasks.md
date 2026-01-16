@@ -19,21 +19,21 @@
 - [x] T211 [P] [US4] worker 登録トークン + worker_token 発行/失効
 - [x] T212 [P] [US4] lease 取得 API + 期限切れ再投入
 - [x] T213 [P] [US4] result/failed API + retry/backoff/DLQ
-- [ ] T214 [P] [US4] HTTP ワーカーポーリング実装
-- [ ] T215 [US4] worker 起動・設定フロー（CLI/スクリプト）
+- [x] T214 [P] [US4] HTTP ワーカーポーリング実装
+- [x] T215 [US4] worker 起動・設定フロー（CLI/スクリプト）
 
 ## Phase 3: Tests & Validation
 
 - [x] T220 [P] [US4] HTTP enqueue/lease/result/failed の単体テスト
-- [ ] T221 [P] [US4] HTTP ワーカーの結合テスト
-- [ ] T222 [US3] モックモードのAPIテスト
-- [ ] T223 [P] [US1/2/3/4] pytest / mypy / ruff 実行
+- [x] T221 [P] [US4] HTTP ワーカーの結合テスト
+- [x] T222 [US3] モックモードのAPIテスト
+- [x] T223 [P] [US1/2/3/4] pytest / mypy / ruff 実行
 
 ## Phase 4: Docs & Ops
 
-- [ ] T230 [P] [US4] HTTP ワーカーセットアップガイド（Upstash非公開前提）
-- [ ] T231 [P] [US4] H2最小サンプル入力と送信スクリプト追加
-- [ ] T232 [P] [US4] E2E 検証手順をSpec/Planに反映
+- [x] T230 [P] [US4] HTTP ワーカーセットアップガイド（Upstash非公開前提）
+- [x] T231 [P] [US4] H2最小サンプル入力と送信スクリプト追加
+- [x] T232 [P] [US4] E2E 検証手順をSpec/Planに反映
 
 ### Notes
 - T221 は T214 完了後に着手（HTTP ワーカー実装が前提）

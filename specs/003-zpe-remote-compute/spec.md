@@ -93,6 +93,18 @@ UI から ZPE 計算を開始しても、サービス提供側ホストでは計
 - **SC-004**: 計算サーバー停止時に 5xx ではなく明確なエラー応答が返る
 - **SC-005**: Upstash の URL/認証情報をユーザーへ配布しない
 
+## E2E 検証手順（MVP）
+
+詳細手順は `docs/zpe-worker-setup.ja.md` に集約し、Spec では要点のみを記載する。
+
+1. **control-plane** で Redis と API を起動（`ZPE_COMPUTE_MODE=remote-http` / `ZPE_RESULT_STORE=redis`）
+2. **admin token** を使って enroll token を発行し、計算サーバーを登録（worker_token を取得）
+3. **compute-plane** で HTTP ワーカーを起動（`scripts/run-zpe-http-worker.sh`）
+4. **H2 サンプル**（`samples/qe-in/h2_zpe.in`）を送信（`scripts/zpe-submit-h2.py`）
+5. `/calc/zpe/jobs/{job_id}` をポーリングし、`/result` と `/files` が取得できることを確認
+
+モック検証は `ZPE_COMPUTE_MODE=mock`（control-plane のみ）で行う。
+
 ## 決定事項
 
 - 既存の RQ + Redis を維持しつつ、**HTTP仲介（remote-http）を主経路**とする
