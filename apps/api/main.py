@@ -385,7 +385,7 @@ def zpe_parse(request: ZPEParseRequest) -> ZPEParseResponse:
                 status_code=404, detail="Structure not found"
             ) from exc
         fixed_indices = extract_fixed_indices(request.content)
-        atoms, _ = parse_qe_atoms(request.content)
+        atoms = parse_qe_atoms(request.content)
         if len(atoms) != len(structure.atoms):
             raise HTTPException(
                 status_code=409,
@@ -412,7 +412,7 @@ def zpe_jobs(request: ZPEJobRequest) -> ZPEJobResponse:
                 status_code=404, detail="Structure not found"
             ) from exc
         fixed_indices = extract_fixed_indices(request.content)
-        atoms, _ = parse_qe_atoms(request.content)
+        atoms = parse_qe_atoms(request.content)
         if len(atoms) != len(structure.atoms):
             raise HTTPException(
                 status_code=409,
