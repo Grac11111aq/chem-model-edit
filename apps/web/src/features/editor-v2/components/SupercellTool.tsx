@@ -56,9 +56,7 @@ const shortLabelFor = (value: string, fallback: string) => {
 }
 
 const createGrid = (rows: number, cols: number, fillId: string) =>
-  Array.from({ length: rows }, () =>
-    Array.from({ length: cols }, () => fillId),
-  )
+  Array.from({ length: rows }, () => Array.from({ length: cols }, () => fillId))
 
 export function SupercellTool({
   structures,
@@ -95,8 +93,9 @@ export function SupercellTool({
   const [axisMode, setAxisMode] = useState<AxisMode>('row-b')
   const [checkOverlap, setCheckOverlap] = useState(false)
   const [overlapTolerance, setOverlapTolerance] = useState('0.2')
-  const [validateLattice, setValidateLattice] =
-    useState<'none' | 'warn' | 'error'>('none')
+  const [validateLattice, setValidateLattice] = useState<
+    'none' | 'warn' | 'error'
+  >('none')
   const [isBuilding, setIsBuilding] = useState(false)
   const [buildError, setBuildError] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
@@ -520,7 +519,9 @@ export function SupercellTool({
                       min={0}
                       step="0.01"
                       value={overlapTolerance}
-                      onChange={(event) => setOverlapTolerance(event.target.value)}
+                      onChange={(event) =>
+                        setOverlapTolerance(event.target.value)
+                      }
                       disabled={!checkOverlap}
                       className="w-20 rounded border border-slate-200 px-2 py-1 text-right text-xs text-slate-600 disabled:bg-slate-100"
                     />
@@ -700,7 +701,7 @@ function GridCanvas({
           const isGhost = rowIndex >= rows || colIndex >= cols
           const cellId = !isGhost ? grid[rowIndex]?.[colIndex] : null
           const entry = cellId ? paletteById.get(cellId) : null
-          const palette = cellId ? entry?.palette ?? paletteFor(cellId) : null
+          const palette = cellId ? (entry?.palette ?? paletteFor(cellId)) : null
           return (
             <button
               key={`cell-${rowIndex}-${colIndex}`}
@@ -722,16 +723,18 @@ function GridCanvas({
               style={{
                 gridRow: rowIndex * 2 + 2,
                 gridColumn: colIndex * 2 + 2,
-                backgroundColor: isGhost ? 'rgba(248,250,252,0.8)' : palette?.bg,
+                backgroundColor: isGhost
+                  ? 'rgba(248,250,252,0.8)'
+                  : palette?.bg,
                 borderColor: isGhost ? '#e2e8f0' : palette?.border,
                 color: palette?.text,
                 boxShadow: isGhost ? 'none' : `0 0 0 1px ${palette?.glow}`,
               }}
               title={
-                isGhost ? 'Expansion preview' : entry?.label ?? cellId ?? ''
+                isGhost ? 'Expansion preview' : (entry?.label ?? cellId ?? '')
               }
             >
-              {isGhost ? '' : entry?.short ?? '•'}
+              {isGhost ? '' : (entry?.short ?? '•')}
             </button>
           )
         }),
