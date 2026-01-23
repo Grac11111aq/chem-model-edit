@@ -10,19 +10,20 @@ import {
   RefreshCw,
   X,
 } from 'lucide-react'
-import {
-  type ColumnDef,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from '@tanstack/react-table'
-
+import { AtomTable } from './AtomTable'
 import { CollapsibleSection } from './CollapsibleSection'
 import { SupercellTool } from './SupercellTool'
 
 import type { ToolMode, WorkspaceFile } from '../types'
-import type { Structure, SupercellBuildMeta } from '@/lib/types'
+import type {
+  Structure,
+  SupercellBuildMeta,
+  ZPEJobStatus,
+  ZPEParseResponse,
+  ZPEResult,
+} from '@/lib/types'
 
+import MolstarViewer from '@/components/molstar/MolstarViewer'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,14 +36,6 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import {
   createZpeJob,
   downloadZpeFile,
   exportQeInput,
@@ -52,10 +45,8 @@ import {
   parseZpeInput,
   structureViewUrl,
 } from '@/lib/api'
-import type { ZPEJobStatus, ZPEParseResponse, ZPEResult } from '@/lib/types'
 import { atomsToPdb } from '@/lib/pdb'
 import { cn } from '@/lib/utils'
-import MolstarViewer from '@/components/molstar/MolstarViewer'
 
 interface ToolPanelProps {
   mode: ToolMode
@@ -76,15 +67,6 @@ const toolTitles: Record<ToolMode, string> = {
   transfer: 'Structure Transfer',
   supercell: 'Supercell Builder',
   vibration: 'ZPE / Vibrations',
-}
-
-type ZpeAtomRow = {
-  index: number
-  symbol: string
-  x: number
-  y: number
-  z: number
-  fixed: boolean
 }
 
 type TransferSummary = {
@@ -141,8 +123,7 @@ const createTransferFilename = (targetName: string) => {
   }
   const match = trimmed.match(/\.[^/.]+$/)
   const base = match ? trimmed.slice(0, -match[0].length) : trimmed
-  const extension =
-    match && match[0].toLowerCase() === '.in' ? match[0] : '.in'
+  const extension = match && match[0].toLowerCase() === '.in' ? match[0] : '.in'
   return `${base}Transferred${extension}`
 }
 
@@ -185,7 +166,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
   const selectedFile = useMemo(
     () =>
       selectedFileId
-        ? availableFiles.find((file) => file.id === selectedFileId) ?? null
+        ? (availableFiles.find((file) => file.id === selectedFileId) ?? null)
         : null,
     [availableFiles, selectedFileId],
   )
@@ -229,19 +210,21 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
     if (!jobId) {
       return
     }
-    let active = true
+    const activeRef = { current: true }
     let intervalId: number | null = null
+
+    const isActive = () => activeRef.current
 
     const pollStatus = async () => {
       try {
         const status = await fetchZpeStatus(jobId)
-        if (!active) {
+        if (!isActive()) {
           return
         }
         setJobStatus(status)
         if (status.status === 'finished') {
           const result = await fetchZpeResult(jobId)
-          if (!active) {
+          if (!isActive()) {
             return
           }
           setJobResult(result)
@@ -254,7 +237,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
           }
         }
       } catch (err) {
-        if (!active) {
+        if (!activeRef.current) {
           return
         }
         setRunError(
@@ -271,7 +254,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
     void pollStatus()
     intervalId = window.setInterval(pollStatus, 2000)
     return () => {
-      active = false
+      activeRef.current = false
       if (intervalId) {
         window.clearInterval(intervalId)
       }
@@ -293,7 +276,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
     [fixedIndexSet],
   )
 
-  const atomRows = useMemo<Array<ZpeAtomRow>>(() => {
+  const atomRows = useMemo(() => {
     if (!baseStructure) {
       return []
     }
@@ -303,7 +286,6 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
       x: atom.x,
       y: atom.y,
       z: atom.z,
-      fixed: fixedIndexSet.has(index),
     }))
   }, [baseStructure, fixedIndexSet])
 
@@ -485,7 +467,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
     }
     const next = new Set<number>()
     atomRows.forEach((row) => {
-      if (!row.fixed) {
+      if (!fixedIndexSet.has(row.index)) {
         next.add(row.index)
       }
     })
@@ -506,7 +488,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
     setMobileIndices((prev) => {
       const next = new Set<number>()
       atomRows.forEach((row) => {
-        if (row.fixed) {
+        if (fixedIndexSet.has(row.index)) {
           return
         }
         if (!prev.has(row.index)) {
@@ -538,129 +520,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
   const hasParseMeta = Boolean(parseResult)
   const selectionEnabled = hasStructure && hasParseMeta
 
-  const columns = useMemo<ColumnDef<ZpeAtomRow>[]>(
-    () => [
-      {
-        accessorKey: 'index',
-        header: '#',
-        cell: ({ row }) => (
-          <span className="text-xs font-medium text-slate-500">
-            {row.original.index + 1}
-          </span>
-        ),
-      },
-      {
-        accessorKey: 'symbol',
-        header: 'El',
-        cell: ({ row }) => (
-          <span className="font-semibold text-slate-700">
-            {row.original.symbol}
-          </span>
-        ),
-      },
-      {
-        accessorKey: 'x',
-        header: 'X',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs text-slate-600">
-            {formatNumber(row.original.x, 3)}
-          </span>
-        ),
-      },
-      {
-        accessorKey: 'y',
-        header: 'Y',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs text-slate-600">
-            {formatNumber(row.original.y, 3)}
-          </span>
-        ),
-      },
-      {
-        accessorKey: 'z',
-        header: 'Z',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs text-slate-600">
-            {formatNumber(row.original.z, 3)}
-          </span>
-        ),
-      },
-      {
-        id: 'fixed',
-        header: 'Fixed',
-        cell: ({ row }) => {
-          if (!hasParseMeta) {
-            return (
-              <Badge
-                variant="outline"
-                className="rounded-full border-slate-200 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-400"
-              >
-                —
-              </Badge>
-            )
-          }
-          return (
-            <Badge
-              variant={row.original.fixed ? 'secondary' : 'outline'}
-              className={cn(
-                'rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide',
-                row.original.fixed
-                  ? 'bg-slate-200 text-slate-600'
-                  : 'border-slate-200 text-slate-500',
-              )}
-            >
-              {row.original.fixed ? 'Yes' : 'No'}
-            </Badge>
-          )
-        },
-      },
-      {
-        id: 'mobile',
-        header: 'Mobile',
-        cell: ({ row }) => {
-          if (!hasParseMeta) {
-            return (
-              <span className="text-xs text-slate-400">—</span>
-            )
-          }
-          const active = mobileIndices.has(row.original.index)
-          const disabled = row.original.fixed
-          return (
-            <button
-              type="button"
-              onClick={() =>
-                handleToggleMobile(row.original.index, row.original.fixed)
-              }
-              disabled={disabled}
-              className={cn(
-                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition',
-                disabled
-                  ? 'cursor-not-allowed bg-slate-100 text-slate-400'
-                  : active
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200',
-              )}
-            >
-              <span
-                className={cn(
-                  'h-1.5 w-1.5 rounded-full',
-                  active ? 'bg-emerald-600' : 'bg-slate-400',
-                )}
-              />
-              {active ? 'On' : 'Off'}
-            </button>
-          )
-        },
-      },
-    ],
-    [hasParseMeta, mobileIndices],
-  )
-
-  const table = useReactTable({
-    data: filteredRows,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  })
+  const selectionColorEnabled = selectionEnabled
 
   const canRun =
     Boolean(selectedFile?.qeInput) &&
@@ -697,7 +557,9 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
                 onError={setViewerError}
                 onLoad={() => setViewerError(null)}
                 selectedAtomIndices={hasParseMeta ? mobileIndexList : undefined}
-                disabledAtomIndices={hasParseMeta ? disabledAtomIndices : undefined}
+                disabledAtomIndices={
+                  hasParseMeta ? disabledAtomIndices : undefined
+                }
                 onAtomToggle={hasParseMeta ? handleMolstarToggle : undefined}
                 className="h-full w-full rounded-none border-0"
               />
@@ -779,54 +641,25 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
 
           <div className="flex min-h-0 flex-1 flex-col">
             {hasStructure ? (
-              <Table containerClassName="h-full">
-                <TableHeader className="sticky top-0 bg-slate-50">
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <TableHead key={header.id}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext(),
-                              )}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableHeader>
-                <TableBody>
-                  {table.getRowModel().rows.length ? (
-                    table.getRowModel().rows.map((row) => (
-                      <TableRow
-                        key={row.id}
-                        className={cn(
-                          row.original.fixed ? 'bg-slate-50/60' : 'bg-white',
-                        )}
-                      >
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext(),
-                            )}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell
-                        colSpan={columns.length}
-                        className="py-10 text-center text-sm text-slate-500"
-                      >
-                        No matching atoms found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+              <AtomTable
+                rows={filteredRows}
+                selectedIndices={
+                  selectionColorEnabled ? mobileIndices : undefined
+                }
+                fixedIndices={selectionColorEnabled ? fixedIndexSet : undefined}
+                onRowClick={
+                  selectionEnabled
+                    ? (index) =>
+                        handleToggleMobile(index, fixedIndexSet.has(index))
+                    : undefined
+                }
+                selectionEnabled={selectionEnabled}
+                digits={3}
+                emptyText="No matching atoms found."
+                stickyHeader
+                containerClassName="h-full max-h-full"
+                showIndex
+              />
             ) : (
               <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
                 Select a workspace file to load atoms.
@@ -1004,10 +837,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
           <div className="mt-3 space-y-3 text-xs text-slate-600">
             <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <span>Use environ.in</span>
-              <Switch
-                checked={useEnviron}
-                onCheckedChange={setUseEnviron}
-              />
+              <Switch checked={useEnviron} onCheckedChange={setUseEnviron} />
             </div>
             <div>
               <label className="text-xs font-medium text-slate-500">
@@ -1096,9 +926,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
               <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
                 Updated
               </p>
-              <p className="mt-1 text-[11px]">
-                {jobStatus?.updated_at ?? '—'}
-              </p>
+              <p className="mt-1 text-[11px]">{jobStatus?.updated_at ?? '—'}</p>
             </div>
             {jobStatus?.detail ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
@@ -1235,15 +1063,15 @@ function TransferToolPanel({
   const [transferError, setTransferError] = useState<string | null>(null)
   const [viewerError, setViewerError] = useState<string | null>(null)
   const [isApplying, setIsApplying] = useState(false)
-  const structureCacheRef = useRef<Record<string, Structure>>({})
+  const structureCacheRef = useRef<Partial<Record<string, Structure>>>({})
   const applyTokenRef = useRef(0)
 
   const fileById = useMemo(
     () => new Map(availableStructures.map((file) => [file.id, file])),
     [availableStructures],
   )
-  const sourceFile = sourceId ? fileById.get(sourceId) ?? null : null
-  const targetFile = targetId ? fileById.get(targetId) ?? null : null
+  const sourceFile = sourceId ? (fileById.get(sourceId) ?? null) : null
+  const targetFile = targetId ? (fileById.get(targetId) ?? null) : null
 
   useEffect(() => {
     if (availableStructures.length === 0) {
@@ -1471,21 +1299,15 @@ function TransferToolPanel({
           <div className="mt-3 space-y-2 text-xs text-slate-600">
             <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <span>Source atoms</span>
-              <span className="font-mono">
-                {summarySource ?? '—'}
-              </span>
+              <span className="font-mono">{summarySource ?? '—'}</span>
             </div>
             <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <span>Target atoms</span>
-              <span className="font-mono">
-                {summaryTarget ?? '—'}
-              </span>
+              <span className="font-mono">{summaryTarget ?? '—'}</span>
             </div>
             <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <span>Transferred</span>
-              <span className="font-mono">
-                {summaryTransferred ?? '—'}
-              </span>
+              <span className="font-mono">{summaryTransferred ?? '—'}</span>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -1682,16 +1504,23 @@ export function ToolPanel({
         </div>
       ) : null}
 
-      {mode === 'vibration' ? (
-        <ZpeToolPanel files={files} />
-      ) : mode === 'supercell' ? (
-        <SupercellTool
-          structures={structures ?? []}
-          onSupercellCreated={onSupercellCreated}
-        />
-      ) : mode === 'transfer' ? (
-        <TransferToolPanel structures={structures ?? files ?? []} />
-      ) : null}
+      {(() => {
+        switch (mode) {
+          case 'vibration':
+            return <ZpeToolPanel files={files} />
+          case 'supercell':
+            return (
+              <SupercellTool
+                structures={structures ?? []}
+                onSupercellCreated={onSupercellCreated}
+              />
+            )
+          case 'transfer':
+            return <TransferToolPanel structures={structures ?? files ?? []} />
+          default:
+            return null
+        }
+      })()}
     </div>
   )
 }

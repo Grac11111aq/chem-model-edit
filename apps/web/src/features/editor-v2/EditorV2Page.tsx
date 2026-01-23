@@ -89,9 +89,7 @@ export default function EditorV2Page() {
   const [files, setFiles] = useState<Array<WorkspaceFile>>(() => [
     ...INITIAL_FILES,
   ])
-  const [importFailures, setImportFailures] = useState<Array<ImportFailure>>(
-    [],
-  )
+  const [importFailures, setImportFailures] = useState<Array<ImportFailure>>([])
   const [isImporting, setIsImporting] = useState(false)
   const [importProgress, setImportProgress] = useState<{
     total: number
@@ -575,7 +573,6 @@ export default function EditorV2Page() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">
               <Atom className="h-5 w-5" />
             </div>
-            <span className="text-lg font-bold tracking-tight">QESpresso</span>
           </div>
 
           <div className="mx-8 flex-1">
