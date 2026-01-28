@@ -64,6 +64,16 @@ ZPE_PW_PATH=/path/to/pw.x
 
 ## Enroll token フロー（任意だが推奨）
 
+### ユーザー自己発行（UI経由）
+1) Web UI でサインインし、Enroll token を発行（有効期限は約 1 時間）。
+2) compute-plane 登録時に queue 名を指定して登録:
+```bash
+curl -X POST http://localhost:8000/calc/zpe/compute/servers/register \
+  -H "Content-Type: application/json" \
+  -d '{"token": "<ENROLL_TOKEN>", "name": "worker-1", "queue_name": "zpe", "meta": {"host": "compute-01"}}'
+```
+登録された worker は UI のキューターゲット一覧に表示されます。
+
 ### 1) control-plane でトークン発行
 ```bash
 curl -X POST http://localhost:8000/calc/zpe/compute/enroll-tokens \
@@ -76,7 +86,7 @@ curl -X POST http://localhost:8000/calc/zpe/compute/enroll-tokens \
 ```bash
 curl -X POST http://localhost:8000/calc/zpe/compute/servers/register \
   -H "Content-Type: application/json" \
-  -d '{"token": "<ENROLL_TOKEN>", "name": "worker-1", "meta": {"host": "compute-01"}}'
+  -d '{"token": "<ENROLL_TOKEN>", "name": "worker-1", "queue_name": "zpe", "meta": {"host": "compute-01"}}'
 ```
 
 ## Worker 起動
@@ -134,7 +144,10 @@ payload = {
 req = urllib.request.Request(
     "http://localhost:8000/calc/zpe/jobs",
     data=json.dumps(payload).encode(),
-    headers={"Content-Type": "application/json"},
+    headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer <USER_SESSION_TOKEN>",
+    },
 )
 print(urllib.request.urlopen(req).read().decode())
 PY

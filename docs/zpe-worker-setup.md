@@ -63,6 +63,16 @@ Optional:
 
 ## Enroll-token flow (optional but recommended)
 
+### User self-service (UI-driven)
+1) Sign in on the web UI and generate an enroll token (valid for ~1 hour).
+2) Use the token on the compute server registration call with a queue name:
+```bash
+curl -X POST http://localhost:8000/calc/zpe/compute/servers/register \
+  -H "Content-Type: application/json" \
+  -d '{"token": "<ENROLL_TOKEN>", "name": "worker-1", "queue_name": "zpe", "meta": {"host": "compute-01"}}'
+```
+The server is registered under the signed-in user and becomes available as a queue target in the UI.
+
 ### 1) Create a token on the control-plane
 ```bash
 curl -X POST http://localhost:8000/calc/zpe/compute/enroll-tokens \
@@ -75,7 +85,7 @@ curl -X POST http://localhost:8000/calc/zpe/compute/enroll-tokens \
 ```bash
 curl -X POST http://localhost:8000/calc/zpe/compute/servers/register \
   -H "Content-Type: application/json" \
-  -d '{"token": "<ENROLL_TOKEN>", "name": "worker-1", "meta": {"host": "compute-01"}}'
+  -d '{"token": "<ENROLL_TOKEN>", "name": "worker-1", "queue_name": "zpe", "meta": {"host": "compute-01"}}'
 ```
 
 ## Start the worker
@@ -133,7 +143,10 @@ payload = {
 req = urllib.request.Request(
     "http://localhost:8000/calc/zpe/jobs",
     data=json.dumps(payload).encode(),
-    headers={"Content-Type": "application/json"},
+    headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer <USER_SESSION_TOKEN>",
+    },
 )
 print(urllib.request.urlopen(req).read().decode())
 PY

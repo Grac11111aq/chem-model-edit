@@ -141,23 +141,15 @@ class AuthStore:
             return None
         settings = get_auth_settings()
         key = f"{_SESSION_PREFIX}{token}"
-        if refresh:
-            user_id = cast(
-                Optional[bytes],
-                self.redis.getex(key, ex=settings.session_ttl_seconds),
-            )
-            ttl = settings.session_ttl_seconds
-        else:
-            user_id = cast(Optional[bytes], self.redis.get(key))
-            ttl = self.redis.ttl(key)
+        user_id = cast(Optional[bytes], self.redis.get(key))
         if not user_id:
             return None
-        if ttl is None or ttl < 0:
-            ttl = 0
+        if refresh:
+            self.redis.expire(key, settings.session_ttl_seconds)
         return AuthSession(
             token=token,
             user_id=user_id.decode("utf-8"),
-            expires_at=_expires_iso(ttl),
+            expires_at=_expires_iso(settings.session_ttl_seconds),
         )
 
     def delete_session(self, token: str) -> None:

@@ -63,6 +63,36 @@ export type ZPEJobStatus = {
   updated_at?: string | null
 }
 
+export type AuthUser = {
+  user_id: string
+  email: string
+  created_at: string
+}
+
+export type AuthSession = {
+  token: string
+  expires_at: string
+  user: AuthUser
+}
+
+export type AuthMe = {
+  user: AuthUser
+  expires_at: string
+}
+
+export type ZPEQueueTarget = {
+  target_id: string
+  queue_name: string
+  server_id: string
+  registered_at: string
+  name?: string | null
+}
+
+export type ZPEQueueTargetList = {
+  targets: Array<ZPEQueueTarget>
+  active_target_id?: string | null
+}
+
 export type ZPEResult = {
   freqs_cm: Array<number>
   zpe_ev: number

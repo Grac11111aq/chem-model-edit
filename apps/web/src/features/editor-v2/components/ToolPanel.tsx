@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  Copy,
   Download,
   Layers,
   MousePointerClick,
@@ -16,10 +17,12 @@ import { SupercellTool } from './SupercellTool'
 
 import type { ToolMode, WorkspaceFile } from '../types'
 import type {
+  AuthSession,
   Structure,
   SupercellBuildMeta,
   ZPEJobStatus,
   ZPEParseResponse,
+  ZPEQueueTarget,
   ZPEResult,
 } from '@/lib/types'
 
@@ -36,15 +39,22 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import {
+  createEnrollToken,
   createZpeJob,
   downloadZpeFile,
   exportQeInput,
+  fetchQueueTargets,
   fetchZpeResult,
   fetchZpeStatus,
   getStructure,
+  loginAccount,
   parseZpeInput,
+  registerAccount,
+  selectQueueTarget,
   structureViewUrl,
+  logoutAccount,
 } from '@/lib/api'
+import { clearSession, getStoredSession, storeSession } from '@/lib/auth'
 import { atomsToPdb } from '@/lib/pdb'
 import { cn } from '@/lib/utils'
 
@@ -147,7 +157,77 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
   const [useEnviron, setUseEnviron] = useState(false)
   const [calcMode, setCalcMode] = useState<'new' | 'continue'>('continue')
   const [inputDir, setInputDir] = useState('')
+  const [session, setSession] = useState<AuthSession | null>(null)
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [authBusy, setAuthBusy] = useState(false)
+  const [queueTargets, setQueueTargets] = useState<Array<ZPEQueueTarget>>([])
+  const [activeTargetId, setActiveTargetId] = useState<string | null>(null)
+  const [targetsError, setTargetsError] = useState<string | null>(null)
+  const [targetsBusy, setTargetsBusy] = useState(false)
+  const [enrollToken, setEnrollToken] = useState<{
+    token: string
+    expires_at: string
+    ttl_seconds: number
+    label?: string | null
+  } | null>(null)
+  const [enrollError, setEnrollError] = useState<string | null>(null)
+  const [enrollBusy, setEnrollBusy] = useState(false)
+  const [tokenCopied, setTokenCopied] = useState(false)
   const parseTokenRef = useRef(0)
+  const sessionTokenRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    setSession(getStoredSession())
+  }, [])
+
+  useEffect(() => {
+    sessionTokenRef.current = session?.token ?? null
+  }, [session])
+
+  const refreshTargets = useCallback(async () => {
+    if (!session) {
+      return
+    }
+    const tokenSnapshot = session.token
+    setTargetsBusy(true)
+    setTargetsError(null)
+    try {
+      const payload = await fetchQueueTargets()
+      if (sessionTokenRef.current !== tokenSnapshot) {
+        return
+      }
+      setQueueTargets(payload.targets ?? [])
+      setActiveTargetId(payload.active_target_id ?? null)
+    } catch (err) {
+      if (sessionTokenRef.current !== tokenSnapshot) {
+        return
+      }
+      setTargetsError(
+        err instanceof Error ? err.message : 'Failed to load compute targets.',
+      )
+    } finally {
+      if (sessionTokenRef.current === tokenSnapshot) {
+        setTargetsBusy(false)
+      }
+    }
+  }, [session])
+
+  useEffect(() => {
+    if (!session) {
+      setQueueTargets([])
+      setActiveTargetId(null)
+      return
+    }
+    void refreshTargets()
+  }, [refreshTargets, session])
+
+  const activeTarget = useMemo(
+    () => queueTargets.find((target) => target.target_id === activeTargetId),
+    [queueTargets, activeTargetId],
+  )
 
   useEffect(() => {
     if (availableFiles.length === 0) {
@@ -372,6 +452,97 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
     selectedFile?.structureId,
   ])
 
+  const handleAuthSubmit = async () => {
+    if (!authEmail.trim() || !authPassword) {
+      setAuthError('Email and password are required.')
+      return
+    }
+    setAuthBusy(true)
+    setAuthError(null)
+    try {
+      const payload =
+        authMode === 'login'
+          ? await loginAccount({
+              email: authEmail.trim(),
+              password: authPassword,
+            })
+          : await registerAccount({
+              email: authEmail.trim(),
+              password: authPassword,
+            })
+      storeSession(payload)
+      setSession(payload)
+      setAuthPassword('')
+      setEnrollToken(null)
+    } catch (err) {
+      setAuthError(
+        err instanceof Error ? err.message : 'Authentication failed.',
+      )
+    } finally {
+      setAuthBusy(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    setAuthBusy(true)
+    try {
+      await logoutAccount()
+    } catch (_err) {
+      // ignore logout errors
+    } finally {
+      clearSession()
+      setSession(null)
+      setQueueTargets([])
+      setActiveTargetId(null)
+      setEnrollToken(null)
+      setAuthBusy(false)
+    }
+  }
+
+  const handleSelectTarget = async (targetId: string) => {
+    setTargetsBusy(true)
+    setTargetsError(null)
+    try {
+      const response = await selectQueueTarget(targetId)
+      setActiveTargetId(response.active_target_id)
+    } catch (err) {
+      setTargetsError(
+        err instanceof Error ? err.message : 'Failed to select target.',
+      )
+    } finally {
+      setTargetsBusy(false)
+    }
+  }
+
+  const handleGenerateToken = async () => {
+    setEnrollBusy(true)
+    setEnrollError(null)
+    setTokenCopied(false)
+    try {
+      const response = await createEnrollToken({ ttlSeconds: 3600 })
+      setEnrollToken(response)
+    } catch (err) {
+      setEnrollError(
+        err instanceof Error ? err.message : 'Failed to create enroll token.',
+      )
+    } finally {
+      setEnrollBusy(false)
+    }
+  }
+
+  const handleCopyToken = async () => {
+    if (!enrollToken?.token) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(enrollToken.token)
+      setTokenCopied(true)
+      window.setTimeout(() => setTokenCopied(false), 1500)
+    } catch (_err) {
+      setTokenCopied(false)
+    }
+  }
+
   const handleParse = () => {
     if (!selectedFile?.qeInput) {
       setParseError('QE input is missing. Re-import the .in file.')
@@ -383,6 +554,14 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
   const handleRun = async () => {
     if (!selectedFile?.qeInput) {
       setRunError('QE input is missing. Re-import the .in file.')
+      return
+    }
+    if (!session) {
+      setRunError('Sign in to run ZPE.')
+      return
+    }
+    if (!activeTargetId) {
+      setRunError('Select an active compute target before running.')
       return
     }
     if (!parseResult) {
@@ -417,6 +596,10 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
   }
 
   const handleDownload = async (kind: 'summary' | 'freqs') => {
+    if (!session) {
+      setRunError('Sign in to download results.')
+      return
+    }
     if (!jobId) {
       setRunError('No completed job available for download.')
       return
@@ -526,7 +709,9 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
     Boolean(selectedFile?.qeInput) &&
     hasStructure &&
     hasParseMeta &&
-    mobileIndices.size > 0
+    mobileIndices.size > 0 &&
+    Boolean(session) &&
+    Boolean(activeTargetId)
 
   return (
     <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden xl:grid-cols-[22rem_minmax(0,1fr)_22rem]">
@@ -670,6 +855,235 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
       </div>
 
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto pr-1">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                Account
+              </p>
+              <p className="text-sm font-semibold text-slate-800">
+                Sign in & Compute
+              </p>
+            </div>
+            <Badge
+              variant="outline"
+              className="rounded-full border-slate-200 px-2 text-[10px] uppercase tracking-wide text-slate-500"
+            >
+              {session ? 'signed in' : 'guest'}
+            </Badge>
+          </div>
+          <div className="mt-3 space-y-3 text-xs text-slate-600">
+            {!session ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={authMode === 'login' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => {
+                      setAuthMode('login')
+                      setAuthError(null)
+                    }}
+                  >
+                    Sign in
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={authMode === 'register' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => {
+                      setAuthMode('register')
+                      setAuthError(null)
+                    }}
+                  >
+                    Create
+                  </Button>
+                </div>
+                <div className="grid gap-2">
+                  <Input
+                    value={authEmail}
+                    onChange={(event) => setAuthEmail(event.target.value)}
+                    placeholder="Email"
+                    type="email"
+                    className="h-8 text-xs"
+                  />
+                  <Input
+                    value={authPassword}
+                    onChange={(event) => setAuthPassword(event.target.value)}
+                    placeholder="Password (min 8 chars)"
+                    type="password"
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 w-full text-xs font-semibold"
+                  onClick={handleAuthSubmit}
+                  disabled={authBusy}
+                >
+                  {authBusy
+                    ? 'Working...'
+                    : authMode === 'login'
+                      ? 'Sign in'
+                      : 'Create account'}
+                </Button>
+                {authError ? (
+                  <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-600">
+                    {authError}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
+                    Signed in
+                  </p>
+                  <p className="mt-1 font-medium text-slate-700">
+                    {session.user.email}
+                  </p>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    expires {session.expires_at}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={refreshTargets}
+                    disabled={targetsBusy}
+                  >
+                    Refresh targets
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={handleLogout}
+                    disabled={authBusy}
+                  >
+                    Sign out
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
+                Compute queue
+              </p>
+              {!session ? (
+                <p className="mt-2 text-[11px] text-slate-400">
+                  Sign in to register and select your compute targets.
+                </p>
+              ) : (
+                <div className="mt-2 space-y-2">
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-500">
+                      Active target
+                    </label>
+                    <Select
+                      value={activeTargetId ?? ''}
+                      onValueChange={handleSelectTarget}
+                      disabled={queueTargets.length === 0 || targetsBusy}
+                    >
+                      <SelectTrigger className="mt-1 h-8 text-xs">
+                        <SelectValue
+                          placeholder={
+                            queueTargets.length > 0
+                              ? 'Select target'
+                              : 'No targets yet'
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {queueTargets.map((target) => (
+                          <SelectItem
+                            key={target.target_id}
+                            value={target.target_id}
+                          >
+                            {target.name ?? target.queue_name} ·{' '}
+                            {target.queue_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {activeTarget ? (
+                    <div className="text-[11px] text-slate-500">
+                      Queue:{' '}
+                      <span className="font-mono">
+                        {activeTarget.queue_name}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400">
+                      Register a compute worker to activate a queue.
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7 px-2 text-[11px]"
+                      onClick={handleGenerateToken}
+                      disabled={enrollBusy}
+                    >
+                      {enrollBusy ? 'Generating...' : 'Generate enroll token'}
+                    </Button>
+                    {enrollToken ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={handleCopyToken}
+                      >
+                        <Copy className="h-3 w-3" />
+                        {tokenCopied ? 'Copied' : 'Copy'}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  {enrollToken ? (
+                    <div className="rounded-md border border-slate-200 bg-white px-2 py-2 text-[10px] text-slate-500">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
+                        Enroll token
+                      </p>
+                      <p className="mt-1 break-all font-mono text-[10px] text-slate-700">
+                        {enrollToken.token}
+                      </p>
+                      <p className="mt-1 text-[10px] text-slate-400">
+                        expires {enrollToken.expires_at}
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {enrollError ? (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-600">
+                      {enrollError}
+                    </div>
+                  ) : null}
+
+                  {targetsError ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+                      {targetsError}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -881,6 +1295,15 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
               <Play className="h-4 w-4" />
               {isSubmitting ? 'Submitting...' : 'Run ZPE'}
             </Button>
+            {!session ? (
+              <p className="text-[11px] text-slate-400">
+                Sign in to enable remote compute.
+              </p>
+            ) : !activeTargetId ? (
+              <p className="text-[11px] text-slate-400">
+                Select a compute target before running.
+              </p>
+            ) : null}
             {!selectedFile?.qeInput ? (
               <p className="text-[11px] text-slate-400">
                 Import a QE .in file to enable ZPE.
