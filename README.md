@@ -35,6 +35,7 @@ For the detailed scope and acceptance criteria, see `specs/001-chem-model-webapp
 
 ## Setup
 See `docs/setup.md` for the full setup guide.
+For ZPE compute-plane (worker) setup, see `docs/zpe-worker-setup.md`.
 ```bash
 git clone git@github.com:Grac11111aq/chem-model-edit.git
 cd chem-model-edit

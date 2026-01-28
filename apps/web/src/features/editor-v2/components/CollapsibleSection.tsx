@@ -7,17 +7,23 @@ interface CollapsibleSectionProps {
   title: string
   defaultOpen?: boolean
   children: ReactNode
+  className?: string
+  contentClassName?: string
 }
 
 export function CollapsibleSection({
   title,
   defaultOpen = false,
   children,
+  className,
+  contentClassName,
 }: CollapsibleSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen)
 
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-card transition-all duration-200">
+    <div
+      className={`overflow-hidden rounded-md border border-border bg-card transition-all duration-200 ${className ?? ''}`}
+    >
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
@@ -34,7 +40,9 @@ export function CollapsibleSection({
       </button>
 
       {isOpen ? (
-        <div className="animate-in slide-in-from-top-1 border-t border-border p-3 duration-200">
+        <div
+          className={`animate-in slide-in-from-top-1 border-t border-border p-3 duration-200 ${contentClassName ?? ''}`}
+        >
           {children}
         </div>
       ) : null}

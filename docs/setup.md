@@ -2,6 +2,7 @@
 
 This guide covers the local dev environment for `chem-model-edit`.
 Quantum ESPRESSO (QE) runtime is **not** required here.
+For the ZPE compute-plane (worker) setup, see `docs/zpe-worker-setup.md`.
 
 ## Prerequisites
 - Git

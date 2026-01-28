@@ -4,25 +4,38 @@
 **Tests**: pytest（バックエンド/ストアの単体テストを優先、E2E は環境確立後に追加）
 
 **Format**: `[ID] [P?] [Story] Description`
-**Stories**: US1=委譲, US2=結果共有, US3=モック
+**Stories**: US1=委譲, US2=結果共有, US3=モック, US4=HTTP仲介
 
 ---
 
 ## Phase 1: Setup
 
-- [ ] T200 [P] [US1] ZPE 設定に `compute_mode` / `result_store` / `auth` を追加
-- [ ] T201 [P] [US2] `ResultStore` インターフェースと Redis 実装を作成
+- [x] T200 [P] [US1] ZPE 設定に `compute_mode` / `result_store` / `auth` を追加
+- [x] T201 [P] [US2] `ResultStore` インターフェースと Redis 実装を作成
 
-## Phase 2: Core Implementation
+## Phase 2: Core Implementation (HTTP仲介)
 
-- [ ] T210 [P] [US1] `remote-queue` バックエンド（RQ への enqueue + meta 更新）
-- [ ] T211 [P] [US2] 結果取得 API が Redis ストア経由で返すように変更
-- [ ] T212 [US3] `mock` バックエンド（決定論的ダミー結果）
-- [ ] T213 [US1/2] エラーハンドリング（計算サーバー/ストア障害の明確化）
-- [ ] T214 [US1] 計算サーバ登録トークン（MVP: 管理者発行、将来拡張前提）
+- [x] T210 [P] [US4] `remote-http` enqueue（payload保存 + queue投入）
+- [x] T211 [P] [US4] worker 登録トークン + worker_token 発行/失効
+- [x] T212 [P] [US4] lease 取得 API + 期限切れ再投入
+- [x] T213 [P] [US4] result/failed API + retry/backoff/DLQ
+- [x] T214 [P] [US4] HTTP ワーカーポーリング実装
+- [x] T215 [US4] worker 起動・設定フロー（CLI/スクリプト）
 
 ## Phase 3: Tests & Validation
 
-- [ ] T220 [P] [US1/2] Redis ストアの単体テスト
-- [ ] T221 [US3] モックモードのAPIテスト
-- [ ] T222 [P] [US1/2/3] pytest / mypy / ruff 実行
+- [x] T220 [P] [US4] HTTP enqueue/lease/result/failed の単体テスト
+- [x] T221 [P] [US4] HTTP ワーカーの結合テスト
+- [x] T222 [US3] モックモードのAPIテスト
+- [x] T223 [P] [US1/2/3/4] pytest / mypy / ruff 実行
+
+## Phase 4: Docs & Ops
+
+- [x] T230 [P] [US4] HTTP ワーカーセットアップガイド（Upstash非公開前提）
+- [x] T231 [P] [US4] H2最小サンプル入力と送信スクリプト追加
+- [x] T232 [P] [US4] E2E 検証手順をSpec/Planに反映
+
+### Notes
+- T221 は T214 完了後に着手（HTTP ワーカー実装が前提）
+- T223 は control-plane 実装の早期検証として先行実行可能
+- T231 はワーカー実装とは独立なので先に着手可能

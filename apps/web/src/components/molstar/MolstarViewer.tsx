@@ -3,7 +3,7 @@ import type { Viewer } from 'molstar/lib/apps/viewer/app'
 
 import { cn } from '@/lib/utils'
 
-type MolstarStructure = {
+type MolstarViewerStructure = {
   id: string
   pdbText?: string
   bcifUrl?: string
@@ -14,7 +14,7 @@ type MolstarStructure = {
 type MolstarViewerProps = {
   pdbText?: string
   bcifUrl?: string
-  structures?: Array<MolstarStructure>
+  structures?: Array<MolstarViewerStructure>
   onError?: (message: string) => void
   onLoad?: () => void
   selectedAtomIndices?: Array<number>
@@ -23,25 +23,10 @@ type MolstarViewerProps = {
   className?: string
 }
 
-type MolstarLoci = unknown
-type MolstarLocation = unknown
-
 type MolstarHelpers = {
-  StructureElement: {
-    Loci: {
-      is: (loci: MolstarLoci) => boolean
-      getFirstLocation: (loci: MolstarLoci) => MolstarLocation | null | undefined
-    }
-  }
-  StructureProperties: {
-    atom: {
-      sourceIndex: (location: MolstarLocation) => number
-    }
-  }
-  Bond: {
-    isLoci: (loci: MolstarLoci) => boolean
-    toFirstStructureElementLoci: (loci: MolstarLoci) => MolstarLoci
-  }
+  StructureElement: any
+  StructureProperties: any
+  Bond: any
 }
 
 const hashString = (value: string) => {
@@ -86,7 +71,7 @@ export default function MolstarViewer({
   const disabledSetRef = useRef<Set<number>>(new Set())
   const [viewerReady, setViewerReady] = useState(false)
 
-  const normalizedStructures = useMemo<Array<MolstarStructure>>(() => {
+  const normalizedStructures = useMemo<Array<MolstarViewerStructure>>(() => {
     if (structures && structures.length > 0) {
       return structures
     }
@@ -156,25 +141,44 @@ export default function MolstarViewer({
     }
     const disabledSet = disabledSetRef.current
     const filtered =
-      disabledSet && disabledSet.size > 0
+      disabledSet.size > 0
         ? indices.filter((index) => !disabledSet.has(index))
         : indices
-    viewer.structureInteractivity({ action: 'select' })
-    if (!filtered || filtered.length === 0) {
+    try {
+      viewer.structureInteractivity({ action: 'select' })
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Mol* selection update failed.'
+      console.error('Mol* selection clear failed.', error)
+      onError?.(message)
       return
     }
-    viewer.structureInteractivity({
-      action: 'select',
-      applyGranularity: false,
-      elements: {
-        items: filtered.map((index) => ({ atom_index: index })),
-      },
-    })
+    if (filtered.length === 0) {
+      return
+    }
+    try {
+      viewer.structureInteractivity({
+        action: 'select',
+        applyGranularity: false,
+        elements: {
+          items: { atom_index: filtered },
+        },
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Mol* selection update failed.'
+      console.error('Mol* selection apply failed.', error)
+      onError?.(message)
+    }
   }
 
   const loadBallAndStick = async (
     viewer: Viewer,
-    items: Array<MolstarStructure>,
+    items: Array<MolstarViewerStructure>,
     loadSignature: string,
   ) => {
     const plugin = (viewer as unknown as { plugin: any }).plugin
@@ -246,9 +250,8 @@ export default function MolstarViewer({
           if (isCancelled()) {
             break
           }
-          const structure = await plugin.builders.structure.createStructure(
-            model,
-          )
+          const structure =
+            await plugin.builders.structure.createStructure(model)
           if (isCancelled()) {
             break
           }
@@ -296,8 +299,7 @@ export default function MolstarViewer({
             selectionSignatureRef.current = selection.join(',')
           } else {
             applySelection(latestSelectionRef.current)
-            selectionSignatureRef.current =
-              latestSelectionRef.current.join(',')
+            selectionSignatureRef.current = latestSelectionRef.current.join(',')
           }
         }
         plugin.managers?.camera?.reset?.()
@@ -310,6 +312,8 @@ export default function MolstarViewer({
   }
 
   const clearViewer = async (viewer: Viewer) => {
+    abortRef.current?.abort()
+    abortRef.current = null
     const plugin = (viewer as unknown as { plugin: any }).plugin
     await plugin.clear()
     structureReadyRef.current = null
@@ -357,7 +361,7 @@ export default function MolstarViewer({
       activeRef.current = false
       abortRef.current?.abort()
       abortRef.current = null
-      clickSubRef.current?.unsubscribe?.()
+      clickSubRef.current?.unsubscribe()
       clickSubRef.current = null
       if (viewerRef.current) {
         viewerRef.current.dispose()
@@ -452,7 +456,7 @@ export default function MolstarViewer({
       return
     }
     if (!selectionEnabled) {
-      clickSubRef.current?.unsubscribe?.()
+      clickSubRef.current?.unsubscribe()
       clickSubRef.current = null
       return
     }
@@ -464,21 +468,18 @@ export default function MolstarViewer({
 
     const setup = async () => {
       if (!helpersRef.current) {
-        const [
-          { StructureElement },
-          { StructureProperties },
-          { Bond },
-        ] = await Promise.all([
-          import('molstar/lib/mol-model/structure/structure/element'),
-          import('molstar/lib/mol-model/structure/structure/properties'),
-          import('molstar/lib/mol-model/structure/structure/unit/bonds'),
-        ])
+        const [{ StructureElement }, { StructureProperties }, { Bond }] =
+          await Promise.all([
+            import('molstar/lib/mol-model/structure/structure/element'),
+            import('molstar/lib/mol-model/structure/structure/properties'),
+            import('molstar/lib/mol-model/structure/structure/unit/bonds'),
+          ])
         helpersRef.current = { StructureElement, StructureProperties, Bond }
       }
       if (cancelled) {
         return
       }
-      clickSubRef.current?.unsubscribe?.()
+      clickSubRef.current?.unsubscribe()
       clickSubRef.current = plugin.behaviors.interaction.click.subscribe(
         (event: any) => {
           const toggle = onAtomToggleRef.current
@@ -489,12 +490,12 @@ export default function MolstarViewer({
           if (!helpers) {
             return
           }
-          const loci = event?.current?.loci
+          const loci = event?.current
           let elementLoci = loci
-          if (helpers.Bond?.isLoci?.(loci)) {
+          if (helpers.Bond.isLoci(loci)) {
             elementLoci = helpers.Bond.toFirstStructureElementLoci(loci)
           }
-          if (!helpers.StructureElement?.Loci?.is?.(elementLoci)) {
+          if (!helpers.StructureElement.Loci.is(elementLoci)) {
             return
           }
           const location =
@@ -506,7 +507,7 @@ export default function MolstarViewer({
           if (typeof index !== 'number' || Number.isNaN(index)) {
             return
           }
-          if (disabledSetRef.current?.has(index)) {
+          if (disabledSetRef.current.has(index)) {
             window.setTimeout(() => {
               applySelection(latestSelectionRef.current)
             }, 0)
@@ -521,7 +522,7 @@ export default function MolstarViewer({
 
     return () => {
       cancelled = true
-      clickSubRef.current?.unsubscribe?.()
+      clickSubRef.current?.unsubscribe()
       clickSubRef.current = null
     }
   }, [selectionEnabled, viewerReady])

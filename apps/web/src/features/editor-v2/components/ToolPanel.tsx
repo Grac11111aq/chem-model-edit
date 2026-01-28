@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  Copy,
   Download,
   Layers,
   MousePointerClick,
@@ -10,19 +11,22 @@ import {
   RefreshCw,
   X,
 } from 'lucide-react'
-import {
-  type ColumnDef,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from '@tanstack/react-table'
-
+import { AtomTable } from './AtomTable'
 import { CollapsibleSection } from './CollapsibleSection'
 import { SupercellTool } from './SupercellTool'
 
 import type { ToolMode, WorkspaceFile } from '../types'
-import type { Structure, SupercellBuildMeta } from '@/lib/types'
+import type {
+  AuthSession,
+  Structure,
+  SupercellBuildMeta,
+  ZPEJobStatus,
+  ZPEParseResponse,
+  ZPEQueueTarget,
+  ZPEResult,
+} from '@/lib/types'
 
+import MolstarViewer from '@/components/molstar/MolstarViewer'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,27 +39,24 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import {
+  createEnrollToken,
   createZpeJob,
   downloadZpeFile,
   exportQeInput,
+  fetchQueueTargets,
   fetchZpeResult,
   fetchZpeStatus,
   getStructure,
+  loginAccount,
   parseZpeInput,
+  registerAccount,
+  selectQueueTarget,
   structureViewUrl,
+  logoutAccount,
 } from '@/lib/api'
-import type { ZPEJobStatus, ZPEParseResponse, ZPEResult } from '@/lib/types'
+import { clearSession, getStoredSession, storeSession } from '@/lib/auth'
 import { atomsToPdb } from '@/lib/pdb'
 import { cn } from '@/lib/utils'
-import MolstarViewer from '@/components/molstar/MolstarViewer'
 
 interface ToolPanelProps {
   mode: ToolMode
@@ -76,15 +77,6 @@ const toolTitles: Record<ToolMode, string> = {
   transfer: 'Structure Transfer',
   supercell: 'Supercell Builder',
   vibration: 'ZPE / Vibrations',
-}
-
-type ZpeAtomRow = {
-  index: number
-  symbol: string
-  x: number
-  y: number
-  z: number
-  fixed: boolean
 }
 
 type TransferSummary = {
@@ -141,8 +133,7 @@ const createTransferFilename = (targetName: string) => {
   }
   const match = trimmed.match(/\.[^/.]+$/)
   const base = match ? trimmed.slice(0, -match[0].length) : trimmed
-  const extension =
-    match && match[0].toLowerCase() === '.in' ? match[0] : '.in'
+  const extension = match && match[0].toLowerCase() === '.in' ? match[0] : '.in'
   return `${base}Transferred${extension}`
 }
 
@@ -166,7 +157,77 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
   const [useEnviron, setUseEnviron] = useState(false)
   const [calcMode, setCalcMode] = useState<'new' | 'continue'>('continue')
   const [inputDir, setInputDir] = useState('')
+  const [session, setSession] = useState<AuthSession | null>(null)
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [authBusy, setAuthBusy] = useState(false)
+  const [queueTargets, setQueueTargets] = useState<Array<ZPEQueueTarget>>([])
+  const [activeTargetId, setActiveTargetId] = useState<string | null>(null)
+  const [targetsError, setTargetsError] = useState<string | null>(null)
+  const [targetsBusy, setTargetsBusy] = useState(false)
+  const [enrollToken, setEnrollToken] = useState<{
+    token: string
+    expires_at: string
+    ttl_seconds: number
+    label?: string | null
+  } | null>(null)
+  const [enrollError, setEnrollError] = useState<string | null>(null)
+  const [enrollBusy, setEnrollBusy] = useState(false)
+  const [tokenCopied, setTokenCopied] = useState(false)
   const parseTokenRef = useRef(0)
+  const sessionTokenRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    setSession(getStoredSession())
+  }, [])
+
+  useEffect(() => {
+    sessionTokenRef.current = session?.token ?? null
+  }, [session])
+
+  const refreshTargets = useCallback(async () => {
+    if (!session) {
+      return
+    }
+    const tokenSnapshot = session.token
+    setTargetsBusy(true)
+    setTargetsError(null)
+    try {
+      const payload = await fetchQueueTargets()
+      if (sessionTokenRef.current !== tokenSnapshot) {
+        return
+      }
+      setQueueTargets(payload.targets ?? [])
+      setActiveTargetId(payload.active_target_id ?? null)
+    } catch (err) {
+      if (sessionTokenRef.current !== tokenSnapshot) {
+        return
+      }
+      setTargetsError(
+        err instanceof Error ? err.message : 'Failed to load compute targets.',
+      )
+    } finally {
+      if (sessionTokenRef.current === tokenSnapshot) {
+        setTargetsBusy(false)
+      }
+    }
+  }, [session])
+
+  useEffect(() => {
+    if (!session) {
+      setQueueTargets([])
+      setActiveTargetId(null)
+      return
+    }
+    void refreshTargets()
+  }, [refreshTargets, session])
+
+  const activeTarget = useMemo(
+    () => queueTargets.find((target) => target.target_id === activeTargetId),
+    [queueTargets, activeTargetId],
+  )
 
   useEffect(() => {
     if (availableFiles.length === 0) {
@@ -185,7 +246,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
   const selectedFile = useMemo(
     () =>
       selectedFileId
-        ? availableFiles.find((file) => file.id === selectedFileId) ?? null
+        ? (availableFiles.find((file) => file.id === selectedFileId) ?? null)
         : null,
     [availableFiles, selectedFileId],
   )
@@ -229,19 +290,21 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
     if (!jobId) {
       return
     }
-    let active = true
+    const activeRef = { current: true }
     let intervalId: number | null = null
+
+    const isActive = () => activeRef.current
 
     const pollStatus = async () => {
       try {
         const status = await fetchZpeStatus(jobId)
-        if (!active) {
+        if (!isActive()) {
           return
         }
         setJobStatus(status)
         if (status.status === 'finished') {
           const result = await fetchZpeResult(jobId)
-          if (!active) {
+          if (!isActive()) {
             return
           }
           setJobResult(result)
@@ -254,7 +317,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
           }
         }
       } catch (err) {
-        if (!active) {
+        if (!activeRef.current) {
           return
         }
         setRunError(
@@ -271,7 +334,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
     void pollStatus()
     intervalId = window.setInterval(pollStatus, 2000)
     return () => {
-      active = false
+      activeRef.current = false
       if (intervalId) {
         window.clearInterval(intervalId)
       }
@@ -293,7 +356,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
     [fixedIndexSet],
   )
 
-  const atomRows = useMemo<Array<ZpeAtomRow>>(() => {
+  const atomRows = useMemo(() => {
     if (!baseStructure) {
       return []
     }
@@ -303,7 +366,6 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
       x: atom.x,
       y: atom.y,
       z: atom.z,
-      fixed: fixedIndexSet.has(index),
     }))
   }, [baseStructure, fixedIndexSet])
 
@@ -390,6 +452,97 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
     selectedFile?.structureId,
   ])
 
+  const handleAuthSubmit = async () => {
+    if (!authEmail.trim() || !authPassword) {
+      setAuthError('Email and password are required.')
+      return
+    }
+    setAuthBusy(true)
+    setAuthError(null)
+    try {
+      const payload =
+        authMode === 'login'
+          ? await loginAccount({
+              email: authEmail.trim(),
+              password: authPassword,
+            })
+          : await registerAccount({
+              email: authEmail.trim(),
+              password: authPassword,
+            })
+      storeSession(payload)
+      setSession(payload)
+      setAuthPassword('')
+      setEnrollToken(null)
+    } catch (err) {
+      setAuthError(
+        err instanceof Error ? err.message : 'Authentication failed.',
+      )
+    } finally {
+      setAuthBusy(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    setAuthBusy(true)
+    try {
+      await logoutAccount()
+    } catch (_err) {
+      // ignore logout errors
+    } finally {
+      clearSession()
+      setSession(null)
+      setQueueTargets([])
+      setActiveTargetId(null)
+      setEnrollToken(null)
+      setAuthBusy(false)
+    }
+  }
+
+  const handleSelectTarget = async (targetId: string) => {
+    setTargetsBusy(true)
+    setTargetsError(null)
+    try {
+      const response = await selectQueueTarget(targetId)
+      setActiveTargetId(response.active_target_id)
+    } catch (err) {
+      setTargetsError(
+        err instanceof Error ? err.message : 'Failed to select target.',
+      )
+    } finally {
+      setTargetsBusy(false)
+    }
+  }
+
+  const handleGenerateToken = async () => {
+    setEnrollBusy(true)
+    setEnrollError(null)
+    setTokenCopied(false)
+    try {
+      const response = await createEnrollToken({ ttlSeconds: 3600 })
+      setEnrollToken(response)
+    } catch (err) {
+      setEnrollError(
+        err instanceof Error ? err.message : 'Failed to create enroll token.',
+      )
+    } finally {
+      setEnrollBusy(false)
+    }
+  }
+
+  const handleCopyToken = async () => {
+    if (!enrollToken?.token) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(enrollToken.token)
+      setTokenCopied(true)
+      window.setTimeout(() => setTokenCopied(false), 1500)
+    } catch (_err) {
+      setTokenCopied(false)
+    }
+  }
+
   const handleParse = () => {
     if (!selectedFile?.qeInput) {
       setParseError('QE input is missing. Re-import the .in file.')
@@ -401,6 +554,14 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
   const handleRun = async () => {
     if (!selectedFile?.qeInput) {
       setRunError('QE input is missing. Re-import the .in file.')
+      return
+    }
+    if (!session) {
+      setRunError('Sign in to run ZPE.')
+      return
+    }
+    if (!activeTargetId) {
+      setRunError('Select an active compute target before running.')
       return
     }
     if (!parseResult) {
@@ -435,6 +596,10 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
   }
 
   const handleDownload = async (kind: 'summary' | 'freqs') => {
+    if (!session) {
+      setRunError('Sign in to download results.')
+      return
+    }
     if (!jobId) {
       setRunError('No completed job available for download.')
       return
@@ -485,7 +650,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
     }
     const next = new Set<number>()
     atomRows.forEach((row) => {
-      if (!row.fixed) {
+      if (!fixedIndexSet.has(row.index)) {
         next.add(row.index)
       }
     })
@@ -506,7 +671,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
     setMobileIndices((prev) => {
       const next = new Set<number>()
       atomRows.forEach((row) => {
-        if (row.fixed) {
+        if (fixedIndexSet.has(row.index)) {
           return
         }
         if (!prev.has(row.index)) {
@@ -538,135 +703,15 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
   const hasParseMeta = Boolean(parseResult)
   const selectionEnabled = hasStructure && hasParseMeta
 
-  const columns = useMemo<ColumnDef<ZpeAtomRow>[]>(
-    () => [
-      {
-        accessorKey: 'index',
-        header: '#',
-        cell: ({ row }) => (
-          <span className="text-xs font-medium text-slate-500">
-            {row.original.index + 1}
-          </span>
-        ),
-      },
-      {
-        accessorKey: 'symbol',
-        header: 'El',
-        cell: ({ row }) => (
-          <span className="font-semibold text-slate-700">
-            {row.original.symbol}
-          </span>
-        ),
-      },
-      {
-        accessorKey: 'x',
-        header: 'X',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs text-slate-600">
-            {formatNumber(row.original.x, 3)}
-          </span>
-        ),
-      },
-      {
-        accessorKey: 'y',
-        header: 'Y',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs text-slate-600">
-            {formatNumber(row.original.y, 3)}
-          </span>
-        ),
-      },
-      {
-        accessorKey: 'z',
-        header: 'Z',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs text-slate-600">
-            {formatNumber(row.original.z, 3)}
-          </span>
-        ),
-      },
-      {
-        id: 'fixed',
-        header: 'Fixed',
-        cell: ({ row }) => {
-          if (!hasParseMeta) {
-            return (
-              <Badge
-                variant="outline"
-                className="rounded-full border-slate-200 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-400"
-              >
-                —
-              </Badge>
-            )
-          }
-          return (
-            <Badge
-              variant={row.original.fixed ? 'secondary' : 'outline'}
-              className={cn(
-                'rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide',
-                row.original.fixed
-                  ? 'bg-slate-200 text-slate-600'
-                  : 'border-slate-200 text-slate-500',
-              )}
-            >
-              {row.original.fixed ? 'Yes' : 'No'}
-            </Badge>
-          )
-        },
-      },
-      {
-        id: 'mobile',
-        header: 'Mobile',
-        cell: ({ row }) => {
-          if (!hasParseMeta) {
-            return (
-              <span className="text-xs text-slate-400">—</span>
-            )
-          }
-          const active = mobileIndices.has(row.original.index)
-          const disabled = row.original.fixed
-          return (
-            <button
-              type="button"
-              onClick={() =>
-                handleToggleMobile(row.original.index, row.original.fixed)
-              }
-              disabled={disabled}
-              className={cn(
-                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition',
-                disabled
-                  ? 'cursor-not-allowed bg-slate-100 text-slate-400'
-                  : active
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200',
-              )}
-            >
-              <span
-                className={cn(
-                  'h-1.5 w-1.5 rounded-full',
-                  active ? 'bg-emerald-600' : 'bg-slate-400',
-                )}
-              />
-              {active ? 'On' : 'Off'}
-            </button>
-          )
-        },
-      },
-    ],
-    [hasParseMeta, mobileIndices],
-  )
-
-  const table = useReactTable({
-    data: filteredRows,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  })
+  const selectionColorEnabled = selectionEnabled
 
   const canRun =
     Boolean(selectedFile?.qeInput) &&
     hasStructure &&
     hasParseMeta &&
-    mobileIndices.size > 0
+    mobileIndices.size > 0 &&
+    Boolean(session) &&
+    Boolean(activeTargetId)
 
   return (
     <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden xl:grid-cols-[22rem_minmax(0,1fr)_22rem]">
@@ -697,7 +742,9 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
                 onError={setViewerError}
                 onLoad={() => setViewerError(null)}
                 selectedAtomIndices={hasParseMeta ? mobileIndexList : undefined}
-                disabledAtomIndices={hasParseMeta ? disabledAtomIndices : undefined}
+                disabledAtomIndices={
+                  hasParseMeta ? disabledAtomIndices : undefined
+                }
                 onAtomToggle={hasParseMeta ? handleMolstarToggle : undefined}
                 className="h-full w-full rounded-none border-0"
               />
@@ -779,54 +826,25 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
 
           <div className="flex min-h-0 flex-1 flex-col">
             {hasStructure ? (
-              <Table containerClassName="h-full">
-                <TableHeader className="sticky top-0 bg-slate-50">
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <TableHead key={header.id}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext(),
-                              )}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableHeader>
-                <TableBody>
-                  {table.getRowModel().rows.length ? (
-                    table.getRowModel().rows.map((row) => (
-                      <TableRow
-                        key={row.id}
-                        className={cn(
-                          row.original.fixed ? 'bg-slate-50/60' : 'bg-white',
-                        )}
-                      >
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext(),
-                            )}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell
-                        colSpan={columns.length}
-                        className="py-10 text-center text-sm text-slate-500"
-                      >
-                        No matching atoms found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+              <AtomTable
+                rows={filteredRows}
+                selectedIndices={
+                  selectionColorEnabled ? mobileIndices : undefined
+                }
+                fixedIndices={selectionColorEnabled ? fixedIndexSet : undefined}
+                onRowClick={
+                  selectionEnabled
+                    ? (index) =>
+                        handleToggleMobile(index, fixedIndexSet.has(index))
+                    : undefined
+                }
+                selectionEnabled={selectionEnabled}
+                digits={3}
+                emptyText="No matching atoms found."
+                stickyHeader
+                containerClassName="h-full max-h-full"
+                showIndex
+              />
             ) : (
               <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
                 Select a workspace file to load atoms.
@@ -837,6 +855,235 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
       </div>
 
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto pr-1">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                Account
+              </p>
+              <p className="text-sm font-semibold text-slate-800">
+                Sign in & Compute
+              </p>
+            </div>
+            <Badge
+              variant="outline"
+              className="rounded-full border-slate-200 px-2 text-[10px] uppercase tracking-wide text-slate-500"
+            >
+              {session ? 'signed in' : 'guest'}
+            </Badge>
+          </div>
+          <div className="mt-3 space-y-3 text-xs text-slate-600">
+            {!session ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={authMode === 'login' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => {
+                      setAuthMode('login')
+                      setAuthError(null)
+                    }}
+                  >
+                    Sign in
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={authMode === 'register' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => {
+                      setAuthMode('register')
+                      setAuthError(null)
+                    }}
+                  >
+                    Create
+                  </Button>
+                </div>
+                <div className="grid gap-2">
+                  <Input
+                    value={authEmail}
+                    onChange={(event) => setAuthEmail(event.target.value)}
+                    placeholder="Email"
+                    type="email"
+                    className="h-8 text-xs"
+                  />
+                  <Input
+                    value={authPassword}
+                    onChange={(event) => setAuthPassword(event.target.value)}
+                    placeholder="Password (min 8 chars)"
+                    type="password"
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 w-full text-xs font-semibold"
+                  onClick={handleAuthSubmit}
+                  disabled={authBusy}
+                >
+                  {authBusy
+                    ? 'Working...'
+                    : authMode === 'login'
+                      ? 'Sign in'
+                      : 'Create account'}
+                </Button>
+                {authError ? (
+                  <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-600">
+                    {authError}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
+                    Signed in
+                  </p>
+                  <p className="mt-1 font-medium text-slate-700">
+                    {session.user.email}
+                  </p>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    expires {session.expires_at}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={refreshTargets}
+                    disabled={targetsBusy}
+                  >
+                    Refresh targets
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={handleLogout}
+                    disabled={authBusy}
+                  >
+                    Sign out
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
+                Compute queue
+              </p>
+              {!session ? (
+                <p className="mt-2 text-[11px] text-slate-400">
+                  Sign in to register and select your compute targets.
+                </p>
+              ) : (
+                <div className="mt-2 space-y-2">
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-500">
+                      Active target
+                    </label>
+                    <Select
+                      value={activeTargetId ?? ''}
+                      onValueChange={handleSelectTarget}
+                      disabled={queueTargets.length === 0 || targetsBusy}
+                    >
+                      <SelectTrigger className="mt-1 h-8 text-xs">
+                        <SelectValue
+                          placeholder={
+                            queueTargets.length > 0
+                              ? 'Select target'
+                              : 'No targets yet'
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {queueTargets.map((target) => (
+                          <SelectItem
+                            key={target.target_id}
+                            value={target.target_id}
+                          >
+                            {target.name ?? target.queue_name} ·{' '}
+                            {target.queue_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {activeTarget ? (
+                    <div className="text-[11px] text-slate-500">
+                      Queue:{' '}
+                      <span className="font-mono">
+                        {activeTarget.queue_name}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400">
+                      Register a compute worker to activate a queue.
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7 px-2 text-[11px]"
+                      onClick={handleGenerateToken}
+                      disabled={enrollBusy}
+                    >
+                      {enrollBusy ? 'Generating...' : 'Generate enroll token'}
+                    </Button>
+                    {enrollToken ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={handleCopyToken}
+                      >
+                        <Copy className="h-3 w-3" />
+                        {tokenCopied ? 'Copied' : 'Copy'}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  {enrollToken ? (
+                    <div className="rounded-md border border-slate-200 bg-white px-2 py-2 text-[10px] text-slate-500">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
+                        Enroll token
+                      </p>
+                      <p className="mt-1 break-all font-mono text-[10px] text-slate-700">
+                        {enrollToken.token}
+                      </p>
+                      <p className="mt-1 text-[10px] text-slate-400">
+                        expires {enrollToken.expires_at}
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {enrollError ? (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-600">
+                      {enrollError}
+                    </div>
+                  ) : null}
+
+                  {targetsError ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+                      {targetsError}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -1004,10 +1251,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
           <div className="mt-3 space-y-3 text-xs text-slate-600">
             <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <span>Use environ.in</span>
-              <Switch
-                checked={useEnviron}
-                onCheckedChange={setUseEnviron}
-              />
+              <Switch checked={useEnviron} onCheckedChange={setUseEnviron} />
             </div>
             <div>
               <label className="text-xs font-medium text-slate-500">
@@ -1051,6 +1295,15 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
               <Play className="h-4 w-4" />
               {isSubmitting ? 'Submitting...' : 'Run ZPE'}
             </Button>
+            {!session ? (
+              <p className="text-[11px] text-slate-400">
+                Sign in to enable remote compute.
+              </p>
+            ) : !activeTargetId ? (
+              <p className="text-[11px] text-slate-400">
+                Select a compute target before running.
+              </p>
+            ) : null}
             {!selectedFile?.qeInput ? (
               <p className="text-[11px] text-slate-400">
                 Import a QE .in file to enable ZPE.
@@ -1096,9 +1349,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
               <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
                 Updated
               </p>
-              <p className="mt-1 text-[11px]">
-                {jobStatus?.updated_at ?? '—'}
-              </p>
+              <p className="mt-1 text-[11px]">{jobStatus?.updated_at ?? '—'}</p>
             </div>
             {jobStatus?.detail ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
@@ -1235,15 +1486,15 @@ function TransferToolPanel({
   const [transferError, setTransferError] = useState<string | null>(null)
   const [viewerError, setViewerError] = useState<string | null>(null)
   const [isApplying, setIsApplying] = useState(false)
-  const structureCacheRef = useRef<Record<string, Structure>>({})
+  const structureCacheRef = useRef<Partial<Record<string, Structure>>>({})
   const applyTokenRef = useRef(0)
 
   const fileById = useMemo(
     () => new Map(availableStructures.map((file) => [file.id, file])),
     [availableStructures],
   )
-  const sourceFile = sourceId ? fileById.get(sourceId) ?? null : null
-  const targetFile = targetId ? fileById.get(targetId) ?? null : null
+  const sourceFile = sourceId ? (fileById.get(sourceId) ?? null) : null
+  const targetFile = targetId ? (fileById.get(targetId) ?? null) : null
 
   useEffect(() => {
     if (availableStructures.length === 0) {
@@ -1471,21 +1722,15 @@ function TransferToolPanel({
           <div className="mt-3 space-y-2 text-xs text-slate-600">
             <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <span>Source atoms</span>
-              <span className="font-mono">
-                {summarySource ?? '—'}
-              </span>
+              <span className="font-mono">{summarySource ?? '—'}</span>
             </div>
             <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <span>Target atoms</span>
-              <span className="font-mono">
-                {summaryTarget ?? '—'}
-              </span>
+              <span className="font-mono">{summaryTarget ?? '—'}</span>
             </div>
             <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <span>Transferred</span>
-              <span className="font-mono">
-                {summaryTransferred ?? '—'}
-              </span>
+              <span className="font-mono">{summaryTransferred ?? '—'}</span>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -1682,16 +1927,23 @@ export function ToolPanel({
         </div>
       ) : null}
 
-      {mode === 'vibration' ? (
-        <ZpeToolPanel files={files} />
-      ) : mode === 'supercell' ? (
-        <SupercellTool
-          structures={structures ?? []}
-          onSupercellCreated={onSupercellCreated}
-        />
-      ) : mode === 'transfer' ? (
-        <TransferToolPanel structures={structures ?? files ?? []} />
-      ) : null}
+      {(() => {
+        switch (mode) {
+          case 'vibration':
+            return <ZpeToolPanel files={files} />
+          case 'supercell':
+            return (
+              <SupercellTool
+                structures={structures ?? []}
+                onSupercellCreated={onSupercellCreated}
+              />
+            )
+          case 'transfer':
+            return <TransferToolPanel structures={structures ?? files ?? []} />
+          default:
+            return null
+        }
+      })()}
     </div>
   )
 }
