@@ -302,14 +302,11 @@ export async function fetchQueueTargets(): Promise<ZPEQueueTargetList> {
 export async function selectQueueTarget(
   targetId: string,
 ): Promise<{ active_target_id: string }> {
-  const response = await fetch(
-    `${API_BASE}/calc/zpe/compute/targets/select`,
-    {
-      method: 'POST',
-      headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ target_id: targetId }),
-    },
-  )
+  const response = await fetch(`${API_BASE}/calc/zpe/compute/targets/select`, {
+    method: 'POST',
+    headers: withAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ target_id: targetId }),
+  })
   return handleResponse(response)
 }
 

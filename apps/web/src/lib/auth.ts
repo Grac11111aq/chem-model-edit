@@ -35,4 +35,3 @@ export function getAuthToken(): string | null {
   const session = getStoredSession()
   return session?.token ?? null
 }
-

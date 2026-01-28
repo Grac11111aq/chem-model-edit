@@ -1004,7 +1004,10 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
 
                   {activeTarget ? (
                     <div className="text-[11px] text-slate-500">
-                      Queue: <span className="font-mono">{activeTarget.queue_name}</span>
+                      Queue:{' '}
+                      <span className="font-mono">
+                        {activeTarget.queue_name}
+                      </span>
                     </div>
                   ) : (
                     <p className="text-[11px] text-slate-400">
