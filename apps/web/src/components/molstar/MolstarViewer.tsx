@@ -30,7 +30,9 @@ type MolstarHelpers = {
   StructureElement: {
     Loci: {
       is: (loci: MolstarLoci) => boolean
-      getFirstLocation: (loci: MolstarLoci) => MolstarLocation | null | undefined
+      getFirstLocation: (
+        loci: MolstarLoci,
+      ) => MolstarLocation | null | undefined
     }
   }
   StructureProperties: {
@@ -156,11 +158,11 @@ export default function MolstarViewer({
     }
     const disabledSet = disabledSetRef.current
     const filtered =
-      disabledSet && disabledSet.size > 0
+      disabledSet.size > 0
         ? indices.filter((index) => !disabledSet.has(index))
         : indices
     viewer.structureInteractivity({ action: 'select' })
-    if (!filtered || filtered.length === 0) {
+    if (filtered.length === 0) {
       return
     }
     viewer.structureInteractivity({
@@ -246,9 +248,8 @@ export default function MolstarViewer({
           if (isCancelled()) {
             break
           }
-          const structure = await plugin.builders.structure.createStructure(
-            model,
-          )
+          const structure =
+            await plugin.builders.structure.createStructure(model)
           if (isCancelled()) {
             break
           }
@@ -296,8 +297,7 @@ export default function MolstarViewer({
             selectionSignatureRef.current = selection.join(',')
           } else {
             applySelection(latestSelectionRef.current)
-            selectionSignatureRef.current =
-              latestSelectionRef.current.join(',')
+            selectionSignatureRef.current = latestSelectionRef.current.join(',')
           }
         }
         plugin.managers?.camera?.reset?.()
@@ -357,7 +357,7 @@ export default function MolstarViewer({
       activeRef.current = false
       abortRef.current?.abort()
       abortRef.current = null
-      clickSubRef.current?.unsubscribe?.()
+      clickSubRef.current?.unsubscribe()
       clickSubRef.current = null
       if (viewerRef.current) {
         viewerRef.current.dispose()
@@ -452,7 +452,7 @@ export default function MolstarViewer({
       return
     }
     if (!selectionEnabled) {
-      clickSubRef.current?.unsubscribe?.()
+      clickSubRef.current?.unsubscribe()
       clickSubRef.current = null
       return
     }
@@ -464,21 +464,22 @@ export default function MolstarViewer({
 
     const setup = async () => {
       if (!helpersRef.current) {
-        const [
-          { StructureElement },
-          { StructureProperties },
-          { Bond },
-        ] = await Promise.all([
-          import('molstar/lib/mol-model/structure/structure/element'),
-          import('molstar/lib/mol-model/structure/structure/properties'),
-          import('molstar/lib/mol-model/structure/structure/unit/bonds'),
-        ])
-        helpersRef.current = { StructureElement, StructureProperties, Bond }
+        const [{ StructureElement }, { StructureProperties }, { Bond }] =
+          await Promise.all([
+            import('molstar/lib/mol-model/structure/structure/element'),
+            import('molstar/lib/mol-model/structure/structure/properties'),
+            import('molstar/lib/mol-model/structure/structure/unit/bonds'),
+          ])
+        helpersRef.current = {
+          StructureElement,
+          StructureProperties,
+          Bond,
+        } as unknown as MolstarHelpers
       }
       if (cancelled) {
         return
       }
-      clickSubRef.current?.unsubscribe?.()
+      clickSubRef.current?.unsubscribe()
       clickSubRef.current = plugin.behaviors.interaction.click.subscribe(
         (event: any) => {
           const toggle = onAtomToggleRef.current
@@ -491,10 +492,10 @@ export default function MolstarViewer({
           }
           const loci = event?.current?.loci
           let elementLoci = loci
-          if (helpers.Bond?.isLoci?.(loci)) {
+          if (helpers.Bond.isLoci(loci)) {
             elementLoci = helpers.Bond.toFirstStructureElementLoci(loci)
           }
-          if (!helpers.StructureElement?.Loci?.is?.(elementLoci)) {
+          if (!helpers.StructureElement.Loci.is(elementLoci)) {
             return
           }
           const location =
@@ -506,7 +507,7 @@ export default function MolstarViewer({
           if (typeof index !== 'number' || Number.isNaN(index)) {
             return
           }
-          if (disabledSetRef.current?.has(index)) {
+          if (disabledSetRef.current.has(index)) {
             window.setTimeout(() => {
               applySelection(latestSelectionRef.current)
             }, 0)
@@ -521,7 +522,7 @@ export default function MolstarViewer({
 
     return () => {
       cancelled = true
-      clickSubRef.current?.unsubscribe?.()
+      clickSubRef.current?.unsubscribe()
       clickSubRef.current = null
     }
   }, [selectionEnabled, viewerReady])

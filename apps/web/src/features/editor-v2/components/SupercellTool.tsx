@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Check,
   ChevronDown,
+  Download,
   MoveDiagonal2,
   Sparkles,
 } from 'lucide-react'
@@ -12,8 +13,9 @@ import type { SupercellBuildMeta, SupercellGridAxis } from '@/lib/types'
 import type { WorkspaceFile } from '../types'
 
 import MolstarViewer from '@/components/molstar/MolstarViewer'
-import { buildSupercell, structureViewUrl } from '@/lib/api'
+import { buildSupercell, getStructure, structureViewUrl } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { atomsToXyz } from '@/lib/xyz'
 
 type SupercellResult = {
   structureId: string
@@ -56,9 +58,17 @@ const shortLabelFor = (value: string, fallback: string) => {
 }
 
 const createGrid = (rows: number, cols: number, fillId: string) =>
-  Array.from({ length: rows }, () =>
-    Array.from({ length: cols }, () => fillId),
-  )
+  Array.from({ length: rows }, () => Array.from({ length: cols }, () => fillId))
+
+const downloadTextFile = (content: string, filename: string, type: string) => {
+  const blob = new Blob([content], { type })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
 
 export function SupercellTool({
   structures,
@@ -95,10 +105,13 @@ export function SupercellTool({
   const [axisMode, setAxisMode] = useState<AxisMode>('row-b')
   const [checkOverlap, setCheckOverlap] = useState(false)
   const [overlapTolerance, setOverlapTolerance] = useState('0.2')
-  const [validateLattice, setValidateLattice] =
-    useState<'none' | 'warn' | 'error'>('none')
+  const [validateLattice, setValidateLattice] = useState<
+    'none' | 'warn' | 'error'
+  >('none')
   const [isBuilding, setIsBuilding] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
   const [buildError, setBuildError] = useState<string | null>(null)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewStructureId, setPreviewStructureId] = useState<string | null>(
     null,
@@ -175,6 +188,7 @@ export function SupercellTool({
 
   const handleBuild = async () => {
     setBuildError(null)
+    setDownloadError(null)
     setPreviewError(null)
     setPreviewMeta(null)
     setPreviewStructureId(null)
@@ -245,6 +259,32 @@ export function SupercellTool({
     }
   }
 
+  const handleDownload = useCallback(async () => {
+    setDownloadError(null)
+    if (!previewStructureId) {
+      setDownloadError('Build a supercell before downloading.')
+      return
+    }
+    setIsDownloading(true)
+    try {
+      const structure = await getStructure(previewStructureId)
+      const xyz = atomsToXyz(structure.atoms)
+      const rows = previewMeta?.rows ?? gridRows
+      const cols = previewMeta?.cols ?? gridCols
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const filename = `supercell-${rows}x${cols}-${timestamp}.xyz`
+      downloadTextFile(xyz, filename, 'chemical/x-xyz')
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Failed to download XYZ.'
+      setDownloadError(message)
+    } finally {
+      setIsDownloading(false)
+    }
+  }, [gridCols, gridRows, previewMeta, previewStructureId])
+
   return (
     <div className="flex h-full gap-4 overflow-hidden">
       <div className="flex w-[26rem] flex-shrink-0 flex-col gap-4 overflow-y-auto pr-1">
@@ -276,17 +316,17 @@ export function SupercellTool({
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-sm">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <span className="font-semibold text-slate-700">Build Summary</span>
-            {previewMeta ? (
-              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                Ready
-              </span>
-            ) : (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
-                Waiting
-              </span>
-            )}
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={!previewStructureId || isDownloading}
+              className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600 shadow-sm transition-colors hover:border-slate-300 hover:text-slate-800 disabled:cursor-not-allowed disabled:border-slate-100 disabled:bg-slate-100 disabled:text-slate-400"
+            >
+              <Download className="h-3 w-3" />
+              {isDownloading ? 'Downloading' : 'Download .xyz'}
+            </button>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
             <div className="rounded-md bg-slate-50 px-2 py-1">
@@ -322,6 +362,11 @@ export function SupercellTool({
             <div className="mt-3 rounded-md border border-slate-200 bg-white px-2 py-2 text-[10px] text-slate-500">
               base: {previewMeta.baseStructureId.slice(0, 8)} • used:{' '}
               {previewMeta.structureIdsUsed.length}
+            </div>
+          ) : null}
+          {downloadError ? (
+            <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[10px] text-red-700">
+              {downloadError}
             </div>
           ) : null}
         </div>
@@ -520,7 +565,9 @@ export function SupercellTool({
                       min={0}
                       step="0.01"
                       value={overlapTolerance}
-                      onChange={(event) => setOverlapTolerance(event.target.value)}
+                      onChange={(event) =>
+                        setOverlapTolerance(event.target.value)
+                      }
                       disabled={!checkOverlap}
                       className="w-20 rounded border border-slate-200 px-2 py-1 text-right text-xs text-slate-600 disabled:bg-slate-100"
                     />
@@ -700,7 +747,7 @@ function GridCanvas({
           const isGhost = rowIndex >= rows || colIndex >= cols
           const cellId = !isGhost ? grid[rowIndex]?.[colIndex] : null
           const entry = cellId ? paletteById.get(cellId) : null
-          const palette = cellId ? entry?.palette ?? paletteFor(cellId) : null
+          const palette = cellId ? (entry?.palette ?? paletteFor(cellId)) : null
           return (
             <button
               key={`cell-${rowIndex}-${colIndex}`}
@@ -722,16 +769,18 @@ function GridCanvas({
               style={{
                 gridRow: rowIndex * 2 + 2,
                 gridColumn: colIndex * 2 + 2,
-                backgroundColor: isGhost ? 'rgba(248,250,252,0.8)' : palette?.bg,
+                backgroundColor: isGhost
+                  ? 'rgba(248,250,252,0.8)'
+                  : palette?.bg,
                 borderColor: isGhost ? '#e2e8f0' : palette?.border,
                 color: palette?.text,
                 boxShadow: isGhost ? 'none' : `0 0 0 1px ${palette?.glow}`,
               }}
               title={
-                isGhost ? 'Expansion preview' : entry?.label ?? cellId ?? ''
+                isGhost ? 'Expansion preview' : (entry?.label ?? cellId ?? '')
               }
             >
-              {isGhost ? '' : entry?.short ?? '•'}
+              {isGhost ? '' : (entry?.short ?? '•')}
             </button>
           )
         }),

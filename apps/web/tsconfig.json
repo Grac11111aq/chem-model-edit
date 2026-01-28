@@ -29,7 +29,8 @@
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@chem-model/shared/*": ["../../packages/shared/src/*"]
     }
   }
 }
