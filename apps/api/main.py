@@ -11,6 +11,12 @@ from pydantic import ValidationError
 from redis.exceptions import RedisError
 
 from models import (
+    AuthLoginRequest,
+    AuthLogoutResponse,
+    AuthMeResponse,
+    AuthRegisterRequest,
+    AuthSessionResponse,
+    AuthUserResponse,
     DeltaTransplantRequest,
     DeltaTransplantResponse,
     ExportRequest,
@@ -47,6 +53,7 @@ from models import (
     ZPEParseResponse,
     ZPEResult,
 )
+from services.auth import get_auth_store
 from services.export import export_qe_in
 from services.lattice import params_to_vectors, vectors_to_params
 from services.parse import parse_qe_in, structure_from_ase
@@ -147,6 +154,28 @@ def require_admin(request: Request) -> None:
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
+def _extract_bearer_token(request: Request) -> str | None:
+    auth = request.headers.get("authorization")
+    if auth and auth.lower().startswith("bearer "):
+        token = auth.split(" ", 1)[1].strip()
+        return token or None
+    return None
+
+
+def _require_user_session(request: Request):
+    store = get_auth_store()
+    token = _extract_bearer_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="unauthorized")
+    session = store.get_user_by_session(token, refresh=True)
+    if not session:
+        raise HTTPException(status_code=401, detail="unauthorized")
+    user = store.get_user_by_id(session.user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="unauthorized")
+    return user, session
+
+
 def _extract_worker_token(request: Request) -> str | None:
     auth = request.headers.get("authorization")
     if auth and auth.lower().startswith("bearer "):
@@ -187,6 +216,62 @@ def _ensure_job_finished(job_id: str) -> None:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/auth/register", response_model=AuthSessionResponse)
+def auth_register(request: AuthRegisterRequest) -> AuthSessionResponse:
+    store = get_auth_store()
+    user = store.create_user(request.email, request.password)
+    session = store.create_session(user.user_id)
+    return AuthSessionResponse(
+        token=session.token,
+        expires_at=session.expires_at,
+        user=AuthUserResponse(
+            user_id=user.user_id,
+            email=user.email,
+            created_at=user.created_at,
+        ),
+    )
+
+
+@app.post("/auth/login", response_model=AuthSessionResponse)
+def auth_login(request: AuthLoginRequest) -> AuthSessionResponse:
+    store = get_auth_store()
+    user = store.authenticate(request.email, request.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="invalid credentials")
+    session = store.create_session(user.user_id)
+    return AuthSessionResponse(
+        token=session.token,
+        expires_at=session.expires_at,
+        user=AuthUserResponse(
+            user_id=user.user_id,
+            email=user.email,
+            created_at=user.created_at,
+        ),
+    )
+
+
+@app.post("/auth/logout", response_model=AuthLogoutResponse)
+def auth_logout(raw: Request) -> AuthLogoutResponse:
+    store = get_auth_store()
+    token = _extract_bearer_token(raw)
+    if token:
+        store.delete_session(token)
+    return AuthLogoutResponse()
+
+
+@app.get("/auth/me", response_model=AuthMeResponse)
+def auth_me(raw: Request) -> AuthMeResponse:
+    user, session = _require_user_session(raw)
+    return AuthMeResponse(
+        user=AuthUserResponse(
+            user_id=user.user_id,
+            email=user.email,
+            created_at=user.created_at,
+        ),
+        expires_at=session.expires_at,
+    )
 
 
 @app.post("/parse", response_model=ParseResponse)

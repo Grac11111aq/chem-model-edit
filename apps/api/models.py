@@ -326,3 +326,34 @@ class ZPEComputeFailedResponse(BaseModel):
     ok: bool = True
     requeued: bool
     retry_count: int
+
+
+class AuthRegisterRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthUserResponse(BaseModel):
+    user_id: str
+    email: str
+    created_at: str
+
+
+class AuthSessionResponse(BaseModel):
+    token: str
+    expires_at: str
+    user: AuthUserResponse
+
+
+class AuthMeResponse(BaseModel):
+    user: AuthUserResponse
+    expires_at: str
+
+
+class AuthLogoutResponse(BaseModel):
+    ok: bool = True
