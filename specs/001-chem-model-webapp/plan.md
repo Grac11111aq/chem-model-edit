@@ -100,9 +100,9 @@ packages/
   - 実行ボタン、結果プレビュー、コピー/ダウンロード
   - エラー表示（APIエラーの内容を明示）
 - テスト: APIユニット + APIルートテスト（正常/異常系）
- - Editor v2: 移植ツールで .out を入力し Δ移植を実行
-   - Source/Target の .in（qeInput）と .out を組み合わせて API を呼び出す
-   - 結果プレビューと .in ダウンロードを接続
+- Editor v2: 移植ツールで .out を入力し Δ移植を実行
+  - Source/Target の .in（qeInput）と .out を組み合わせて API を呼び出す
+  - 結果プレビューと .in ダウンロードを接続
 
 ### Phase 4: 複合スーパーセル/格子変換 (P3)
 - タイルパターン入力（StructureId の 2D グリッド or GUI）
