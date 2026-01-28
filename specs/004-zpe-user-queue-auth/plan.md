@@ -13,8 +13,9 @@ Introduce lightweight user authentication (open signup + Redis-backed sessions),
 - **Frontend**: TanStack Start + existing ZPE UI
 - **Storage**: Redis for sessions, user profiles, queue targets, and job ownership
 - **Session TTL**: 7 days (sliding)
-- **Password Hashing**: Argon2id (m=19456 KiB, t=2, p=1). Bcrypt (cost >= 10) only for legacy migration.
+- **Password Hashing**: Argon2id (m=19456 KiB, t=2, p=1) target; MVP may use PBKDF2-HMAC-SHA256 (>=210k) until Argon2id is available. Bcrypt (cost >= 10) only for legacy migration.
 - **Auth Hardening**: rate-limit /auth/register and /auth/login; lock out after 5-10 consecutive failures and cap ~100 failed attempts per account per hour (with backoff).
+- **Token Transport**: Authorization Bearer header (localStorage in web client), so CSRF is not applicable; XSS hardening required.
 
 ## Project Structure
 
@@ -44,10 +45,12 @@ apps/web/
    - Add user + session storage (Redis)
    - Add `/auth/register`, `/auth/login`, `/auth/logout`, `/auth/me`
    - Add session dependency + sliding TTL
+   - Add rate limiting/lockout for auth endpoints (per-account + per-IP)
 
 3. **Queue Target + ZPE Ownership (PR-3)**
    - Store queue targets per user, select active target
    - Allow user-auth to issue enroll tokens
+   - Log admin-token enroll issuance (actor/time/IP/target)
    - Store job owner mapping and enforce on status/result/files
    - Enqueue jobs to selected queue target
 
