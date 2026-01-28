@@ -47,7 +47,7 @@ from services.parse import parse_qe_in, structure_from_ase
 from services.structures import (
     create_structure_from_qe,
     get_structure,
-    get_structure_bcif,
+    get_structure_cif,
     get_structure_entry,
     register_structure_atoms,
 )
@@ -187,23 +187,17 @@ def get_structure_route(structure_id: str) -> StructureGetResponse:
 @app.get("/structures/{structure_id}/view")
 def view_structure(
     structure_id: str,
-    format: str = Query("bcif"),
-    lossy: int = Query(0, ge=0, le=1),
-    precision: int = Query(3, ge=0),
+    format: str = Query("cif"),
 ) -> Response:
-    if format != "bcif":
+    if format != "cif":
         raise HTTPException(status_code=400, detail="Unsupported format")
 
     try:
-        bcif = get_structure_bcif(
-            structure_id,
-            lossy=lossy == 1,
-            precision=precision if lossy == 1 else None,
-        )
+        cif = get_structure_cif(structure_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Structure not found") from exc
 
-    return Response(content=bcif, media_type="application/x-bcif")
+    return Response(content=cif, media_type="chemical/x-cif")
 
 
 @app.post("/export", response_model=ExportResponse)

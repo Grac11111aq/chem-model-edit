@@ -41,7 +41,7 @@ export function FilePanel({
 
   useEffect(() => {
     setViewerError(null)
-  }, [data.bcifUrl, data.pdbText])
+  }, [data.cifUrl, data.pdbText])
 
   useEffect(() => {
     onStructureLoadedRef.current = onStructureLoaded
@@ -132,9 +132,9 @@ export function FilePanel({
         <div className="group relative flex h-1/2 min-h-[220px] w-full flex-col overflow-hidden rounded-lg border border-border bg-card">
           <div className="absolute inset-0 bg-grid-slate-200/50 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.7))]" />
           <div className="relative z-10 flex w-full flex-1 flex-col">
-            {data.bcifUrl ? (
+            {data.cifUrl ? (
               <MolstarViewer
-                bcifUrl={data.bcifUrl}
+                cifUrl={data.cifUrl}
                 onError={setViewerError}
                 onLoad={() => setViewerError(null)}
               />

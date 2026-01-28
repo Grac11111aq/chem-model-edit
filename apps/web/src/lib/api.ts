@@ -87,18 +87,12 @@ export async function getStructure(structureId: string): Promise<Structure> {
 export function structureViewUrl(
   structureId: string,
   params?: {
-    format?: 'bcif'
-    lossy?: boolean
-    precision?: number
+    format?: 'cif'
   },
 ): string {
-  const format = params?.format ?? 'bcif'
-  const lossy = params?.lossy ? 1 : 0
-  const precision = params?.precision ?? 3
+  const format = params?.format ?? 'cif'
   const query = new URLSearchParams({
     format,
-    lossy: String(lossy),
-    precision: String(precision),
   })
   const safeId = encodeURIComponent(structureId)
   return `${API_BASE}/structures/${safeId}/view?${query.toString()}`

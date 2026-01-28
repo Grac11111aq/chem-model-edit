@@ -124,11 +124,7 @@ export default function EditorV2Page() {
         kind: 'out',
         label: `Supercell ${result.meta.rows}x${result.meta.cols}`,
         structureId: result.structureId,
-        bcifUrl: structureViewUrl(result.structureId, {
-          format: 'bcif',
-          lossy: false,
-          precision: 3,
-        }),
+        cifUrl: structureViewUrl(result.structureId, { format: 'cif' }),
         parseSource: 'supercell',
         initialOpenSections: { table: false, parameter: false },
       }
@@ -375,11 +371,7 @@ export default function EditorV2Page() {
               await createStructureFromQe(content)
             const baseName = file.name.replace(/\.[^/.]+$/, '') || file.name
             const id = createImportId()
-            const bcifUrl = structureViewUrl(structure_id, {
-              format: 'bcif',
-              lossy: false,
-              precision: 3,
-            })
+            const cifUrl = structureViewUrl(structure_id, { format: 'cif' })
             const nextFile: WorkspaceFile = {
               id,
               name: file.name,
@@ -387,7 +379,7 @@ export default function EditorV2Page() {
               label: baseName,
               structureId: structure_id,
               structure,
-              bcifUrl,
+              cifUrl,
               parseSource: source,
               qeInput: content,
               initialOpenSections: { table: false, parameter: true },

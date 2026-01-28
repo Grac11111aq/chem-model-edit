@@ -6,7 +6,7 @@ export type WorkspaceFile = {
   kind: 'in' | 'out'
   label: string
   pdbText?: string
-  bcifUrl?: string
+  cifUrl?: string
   structureId?: string
   structure?: Structure
   parseSource?: string

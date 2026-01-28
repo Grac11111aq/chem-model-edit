@@ -118,9 +118,7 @@ export function SupercellTool({
 
   const previewUrl = previewStructureId
     ? structureViewUrl(previewStructureId, {
-        format: 'bcif',
-        lossy: false,
-        precision: 3,
+        format: 'cif',
       })
     : null
 
@@ -251,7 +249,7 @@ export function SupercellTool({
         <div className="relative flex aspect-square w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           {previewUrl ? (
             <MolstarViewer
-              bcifUrl={previewUrl}
+              cifUrl={previewUrl}
               onError={setPreviewError}
               onLoad={() => setPreviewError(null)}
             />
