@@ -301,7 +301,6 @@ def compute_zpe_artifacts(payload: Dict[str, Any], *, job_id: str) -> ZPECompute
 
 
 def run_zpe_job(payload: Dict[str, Any]) -> Dict[str, Any]:
-    settings = get_zpe_settings()
     store = get_result_store()
 
     job = get_current_job()
