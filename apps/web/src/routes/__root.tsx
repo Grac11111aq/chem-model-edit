@@ -1,9 +1,7 @@
 import { Suspense, lazy } from 'react'
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
+import { Outlet, createRootRoute } from '@tanstack/react-router'
 
 import Header from '../components/Header'
-
-import appCss from '../styles.css?url'
 
 const RouterDevtoolsPanel = import.meta.env.DEV
   ? lazy(() =>
@@ -22,56 +20,29 @@ const Devtools = import.meta.env.DEV
   : null
 
 export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      {
-        charSet: 'utf-8',
-      },
-      {
-        name: 'viewport',
-        content: 'width=device-width, initial-scale=1',
-      },
-      {
-        title: 'Chem Model Edit',
-      },
-    ],
-    links: [
-      {
-        rel: 'stylesheet',
-        href: appCss,
-      },
-    ],
-  }),
-
-  shellComponent: RootDocument,
+  component: RootLayout,
 })
 
-function RootDocument({ children }: { children: React.ReactNode }) {
+function RootLayout() {
   return (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <Header />
-        {children}
-        {Devtools && RouterDevtoolsPanel ? (
-          <Suspense fallback={null}>
-            <Devtools
-              config={{
-                position: 'bottom-right',
-              }}
-              plugins={[
-                {
-                  name: 'Tanstack Router',
-                  render: <RouterDevtoolsPanel />,
-                },
-              ]}
-            />
-          </Suspense>
-        ) : null}
-        <Scripts />
-      </body>
-    </html>
+    <>
+      <Header />
+      <Outlet />
+      {Devtools && RouterDevtoolsPanel ? (
+        <Suspense fallback={null}>
+          <Devtools
+            config={{
+              position: 'bottom-right',
+            }}
+            plugins={[
+              {
+                name: 'Tanstack Router',
+                render: <RouterDevtoolsPanel />,
+              },
+            ]}
+          />
+        </Suspense>
+      ) : null}
+    </>
   )
 }
