@@ -59,8 +59,8 @@ apps/web/
 
 ## Rollback Plan
 
-- Disable auth by bypassing auth dependency
-- Invalidate existing sessions (delete auth:session:* keys) or set a short global TTL before bypassing so revoked sessions cannot access the default queue
+- Disable auth by bypassing auth dependency (all endpoints behave as anonymous)
+- Invalidate existing sessions before bypassing (delete `auth:session:*` keys) or set a short global TTL; after bypass, ignore Authorization headers so stale tokens cannot access the default queue
 - Fall back to single default queue in settings
 - Remove owner checks from job endpoints
 - Keep Redis data; no migration rollback needed
