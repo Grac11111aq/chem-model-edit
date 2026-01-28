@@ -48,11 +48,11 @@ import {
   fetchZpeStatus,
   getStructure,
   loginAccount,
+  logoutAccount,
   parseZpeInput,
   registerAccount,
   selectQueueTarget,
   structureViewUrl,
-  logoutAccount,
 } from '@/lib/api'
 import { clearSession, getStoredSession, storeSession } from '@/lib/auth'
 import { atomsToPdb } from '@/lib/pdb'
@@ -199,7 +199,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
       if (sessionTokenRef.current !== tokenSnapshot) {
         return
       }
-      setQueueTargets(payload.targets ?? [])
+      setQueueTargets(payload.targets)
       setActiveTargetId(payload.active_target_id ?? null)
     } catch (err) {
       if (sessionTokenRef.current !== tokenSnapshot) {
@@ -255,23 +255,19 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
     return selectedFile?.structure ?? parseResult?.structure ?? null
   }, [parseResult?.structure, selectedFile?.structure])
 
-  const viewerBcifUrl = useMemo(() => {
-    if (selectedFile?.bcifUrl) {
-      return selectedFile.bcifUrl
+  const viewerCifUrl = useMemo(() => {
+    if (selectedFile?.cifUrl) {
+      return selectedFile.cifUrl
     }
     if (selectedFile?.structureId) {
-      return structureViewUrl(selectedFile.structureId, {
-        format: 'bcif',
-        lossy: false,
-        precision: 3,
-      })
+      return structureViewUrl(selectedFile.structureId, { format: 'cif' })
     }
     return null
-  }, [selectedFile?.bcifUrl, selectedFile?.structureId])
+  }, [selectedFile?.cifUrl, selectedFile?.structureId])
 
   useEffect(() => {
     setViewerError(null)
-  }, [viewerBcifUrl])
+  }, [viewerCifUrl])
 
   useEffect(() => {
     parseTokenRef.current += 1
@@ -702,7 +698,6 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
   const hasStructure = atomCount > 0
   const hasParseMeta = Boolean(parseResult)
   const selectionEnabled = hasStructure && hasParseMeta
-
   const selectionColorEnabled = selectionEnabled
 
   const canRun =
@@ -731,14 +726,14 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
                 variant="outline"
                 className="rounded-full border-slate-200 px-2 text-[10px] uppercase tracking-wide text-slate-500"
               >
-                {viewerBcifUrl ? 'bcif' : 'missing'}
+                {viewerCifUrl ? 'cif' : 'missing'}
               </Badge>
             </div>
           </div>
           <div className="relative min-h-0 flex-1">
-            {viewerBcifUrl ? (
+            {viewerCifUrl ? (
               <MolstarViewer
-                bcifUrl={viewerBcifUrl}
+                cifUrl={viewerCifUrl}
                 onError={setViewerError}
                 onLoad={() => setViewerError(null)}
                 selectedAtomIndices={hasParseMeta ? mobileIndexList : undefined}
@@ -755,7 +750,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
                   No structure loaded
                 </span>
                 <span className="text-xs text-slate-400">
-                  Import a QE input to fetch BCIF.
+                  Import a QE input to fetch CIF.
                 </span>
               </div>
             )}

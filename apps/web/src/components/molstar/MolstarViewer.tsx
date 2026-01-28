@@ -6,14 +6,14 @@ import { cn } from '@/lib/utils'
 type MolstarViewerStructure = {
   id: string
   pdbText?: string
-  bcifUrl?: string
+  cifUrl?: string
   opacity?: number
   visible?: boolean
 }
 
 type MolstarViewerProps = {
   pdbText?: string
-  bcifUrl?: string
+  cifUrl?: string
   structures?: Array<MolstarViewerStructure>
   onError?: (message: string) => void
   onLoad?: () => void
@@ -46,7 +46,7 @@ const signatureForText = (value: string) => {
 
 export default function MolstarViewer({
   pdbText,
-  bcifUrl,
+  cifUrl,
   structures,
   onError,
   onLoad,
@@ -75,14 +75,14 @@ export default function MolstarViewer({
     if (structures && structures.length > 0) {
       return structures
     }
-    if (bcifUrl) {
-      return [{ id: 'single', bcifUrl, opacity: 1, visible: true }]
+    if (cifUrl) {
+      return [{ id: 'single', cifUrl, opacity: 1, visible: true }]
     }
     if (pdbText) {
       return [{ id: 'single', pdbText, opacity: 1, visible: true }]
     }
     return []
-  }, [bcifUrl, pdbText, structures])
+  }, [cifUrl, pdbText, structures])
 
   const signature = useMemo(() => {
     if (normalizedStructures.length === 0) {
@@ -92,8 +92,8 @@ export default function MolstarViewer({
       .map((structure) => {
         const opacity = structure.opacity ?? 1
         const visible = structure.visible ?? true
-        const payloadSignature = structure.bcifUrl
-          ? `bcif:${structure.bcifUrl}`
+        const payloadSignature = structure.cifUrl
+          ? `cif:${structure.cifUrl}`
           : structure.pdbText
             ? `pdb:${signatureForText(structure.pdbText)}`
             : 'empty'
@@ -204,28 +204,28 @@ export default function MolstarViewer({
         }
         try {
           let data = null
-          let format: 'pdb' | 'bcif' = 'pdb'
-          if (item.bcifUrl) {
-            const response = await fetch(item.bcifUrl, {
+          let format: 'pdb' | 'cif' = 'pdb'
+          if (item.cifUrl) {
+            const response = await fetch(item.cifUrl, {
               signal: controller.signal,
             })
             if (!response.ok) {
-              lastError = `BCIF fetch failed (HTTP ${response.status})`
-              console.error('Mol* bcif 取得に失敗しました。', response.status)
+              lastError = `CIF fetch failed (HTTP ${response.status})`
+              console.error('Mol* cif 取得に失敗しました。', response.status)
               continue
             }
             if (isCancelled()) {
               break
             }
-            const buffer = await response.arrayBuffer()
+            const text = await response.text()
             if (isCancelled()) {
               break
             }
             data = await plugin.builders.data.rawData(
-              { data: new Uint8Array(buffer) },
+              { data: text },
               { state: { isGhost: true } },
             )
-            format = 'bcif'
+            format = 'cif'
           } else if (item.pdbText) {
             data = await plugin.builders.data.rawData(
               { data: item.pdbText },
@@ -344,7 +344,7 @@ export default function MolstarViewer({
           viewportShowExpand: false,
           viewportShowControls: false,
           backgroundColor: 0x0b1120,
-          customFormats: [['bcif', CifCoreProvider]],
+          customFormats: [['cif', CifCoreProvider]],
         })
         if (!activeRef.current) {
           viewer.dispose()
