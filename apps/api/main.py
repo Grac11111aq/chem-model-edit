@@ -345,9 +345,7 @@ def zpe_parse(request: ZPEParseRequest) -> ZPEParseResponse:
         try:
             structure = get_structure(request.structure_id)
         except KeyError as exc:
-            raise HTTPException(
-                status_code=404, detail="Structure not found"
-            ) from exc
+            raise HTTPException(status_code=404, detail="Structure not found") from exc
         fixed_indices = extract_fixed_indices(request.content)
     else:
         structure, fixed_indices = parse_qe_structure(request.content)
@@ -366,9 +364,7 @@ def zpe_jobs(request: ZPEJobRequest) -> ZPEJobResponse:
         try:
             structure = get_structure(request.structure_id)
         except KeyError as exc:
-            raise HTTPException(
-                status_code=404, detail="Structure not found"
-            ) from exc
+            raise HTTPException(status_code=404, detail="Structure not found") from exc
         fixed_indices = extract_fixed_indices(request.content)
         atoms, _ = parse_qe_atoms(request.content)
         if len(atoms) != len(structure.atoms):
@@ -385,6 +381,7 @@ def zpe_jobs(request: ZPEJobRequest) -> ZPEJobResponse:
     payload["mobile_indices"] = mobile_indices
     job_id = enqueue_zpe_job(payload)
     return ZPEJobResponse(job_id=job_id)
+
 
 @app.post("/calc/zpe/compute/enroll-tokens", response_model=ZPEEnrollTokenResponse)
 def zpe_compute_enroll_token(
@@ -404,7 +401,9 @@ def zpe_compute_enroll_token(
     )
 
 
-@app.post("/calc/zpe/compute/servers/register", response_model=ZPEComputeRegisterResponse)
+@app.post(
+    "/calc/zpe/compute/servers/register", response_model=ZPEComputeRegisterResponse
+)
 def zpe_compute_register(
     request: ZPEComputeRegisterRequest,
 ) -> ZPEComputeRegisterResponse:
@@ -422,6 +421,8 @@ def zpe_compute_register(
         registered_at=registration.registered_at,
         name=registration.name,
     )
+
+
 @app.get("/calc/zpe/jobs/{job_id}", response_model=ZPEJobStatusResponse)
 def zpe_job_status(job_id: str) -> ZPEJobStatusResponse:
     store = get_result_store()
@@ -443,7 +444,9 @@ def zpe_job_result(job_id: str) -> ZPEJobResultResponse:
     try:
         result_dict = store.get_result(job_id)
     except KeyError as exc:
-        raise HTTPException(status_code=500, detail="result missing after completion") from exc
+        raise HTTPException(
+            status_code=500, detail="result missing after completion"
+        ) from exc
     try:
         result = ZPEResult(**result_dict)
     except ValidationError as exc:
@@ -462,11 +465,13 @@ def zpe_job_files(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except KeyError as exc:
-        raise HTTPException(status_code=500, detail="file missing after completion") from exc
+        raise HTTPException(
+            status_code=500, detail="file missing after completion"
+        ) from exc
     filename = "summary.txt" if kind == "summary" else "freqs.csv"
     media_type = "text/plain" if kind == "summary" else "text/csv"
     return Response(
         content=payload,
         media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

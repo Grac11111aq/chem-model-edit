@@ -12,6 +12,7 @@ from models import Structure
 from services.cif import atoms_to_cif
 from services.parse import parse_qe_atoms, structure_from_ase
 
+
 @dataclass
 class StoredStructure:
     atoms: ASEAtoms

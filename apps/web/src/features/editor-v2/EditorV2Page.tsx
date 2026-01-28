@@ -89,9 +89,7 @@ export default function EditorV2Page() {
   const [files, setFiles] = useState<Array<WorkspaceFile>>(() => [
     ...INITIAL_FILES,
   ])
-  const [importFailures, setImportFailures] = useState<Array<ImportFailure>>(
-    [],
-  )
+  const [importFailures, setImportFailures] = useState<Array<ImportFailure>>([])
   const [isImporting, setIsImporting] = useState(false)
   const [importProgress, setImportProgress] = useState<{
     total: number

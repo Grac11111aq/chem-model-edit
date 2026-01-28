@@ -35,9 +35,8 @@ export function FilePanel({
   )
   const [tableError, setTableError] = useState<string | null>(null)
   const [isTableLoading, setIsTableLoading] = useState(false)
-  const onStructureLoadedRef = useRef<FilePanelProps['onStructureLoaded']>(
-    onStructureLoaded,
-  )
+  const onStructureLoadedRef =
+    useRef<FilePanelProps['onStructureLoaded']>(onStructureLoaded)
 
   useEffect(() => {
     setViewerError(null)
@@ -190,7 +189,10 @@ export function FilePanel({
                   <div className="py-2 text-slate-400">No atoms.</div>
                 ) : (
                   atoms.map((atom, index) => (
-                    <div key={`${atom.symbol}-${index}`} className="grid grid-cols-4 gap-2">
+                    <div
+                      key={`${atom.symbol}-${index}`}
+                      className="grid grid-cols-4 gap-2"
+                    >
                       <span>{atom.symbol}</span>
                       <span>{atom.x.toFixed(4)}</span>
                       <span>{atom.y.toFixed(4)}</span>

@@ -141,8 +141,7 @@ const createTransferFilename = (targetName: string) => {
   }
   const match = trimmed.match(/\.[^/.]+$/)
   const base = match ? trimmed.slice(0, -match[0].length) : trimmed
-  const extension =
-    match && match[0].toLowerCase() === '.in' ? match[0] : '.in'
+  const extension = match && match[0].toLowerCase() === '.in' ? match[0] : '.in'
   return `${base}Transferred${extension}`
 }
 
@@ -185,7 +184,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
   const selectedFile = useMemo(
     () =>
       selectedFileId
-        ? availableFiles.find((file) => file.id === selectedFileId) ?? null
+        ? (availableFiles.find((file) => file.id === selectedFileId) ?? null)
         : null,
     [availableFiles, selectedFileId],
   )
@@ -615,9 +614,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
         header: 'Mobile',
         cell: ({ row }) => {
           if (!hasParseMeta) {
-            return (
-              <span className="text-xs text-slate-400">—</span>
-            )
+            return <span className="text-xs text-slate-400">—</span>
           }
           const active = mobileIndices.has(row.original.index)
           const disabled = row.original.fixed
@@ -693,7 +690,9 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
                 onError={setViewerError}
                 onLoad={() => setViewerError(null)}
                 selectedAtomIndices={hasParseMeta ? mobileIndexList : undefined}
-                disabledAtomIndices={hasParseMeta ? disabledAtomIndices : undefined}
+                disabledAtomIndices={
+                  hasParseMeta ? disabledAtomIndices : undefined
+                }
                 onAtomToggle={hasParseMeta ? handleMolstarToggle : undefined}
                 className="h-full w-full rounded-none border-0"
               />
@@ -1000,10 +999,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
           <div className="mt-3 space-y-3 text-xs text-slate-600">
             <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <span>Use environ.in</span>
-              <Switch
-                checked={useEnviron}
-                onCheckedChange={setUseEnviron}
-              />
+              <Switch checked={useEnviron} onCheckedChange={setUseEnviron} />
             </div>
             <div>
               <label className="text-xs font-medium text-slate-500">
@@ -1092,9 +1088,7 @@ function ZpeToolPanel({ files = [] }: { files?: Array<WorkspaceFile> }) {
               <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
                 Updated
               </p>
-              <p className="mt-1 text-[11px]">
-                {jobStatus?.updated_at ?? '—'}
-              </p>
+              <p className="mt-1 text-[11px]">{jobStatus?.updated_at ?? '—'}</p>
             </div>
             {jobStatus?.detail ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
@@ -1238,8 +1232,8 @@ function TransferToolPanel({
     () => new Map(availableStructures.map((file) => [file.id, file])),
     [availableStructures],
   )
-  const sourceFile = sourceId ? fileById.get(sourceId) ?? null : null
-  const targetFile = targetId ? fileById.get(targetId) ?? null : null
+  const sourceFile = sourceId ? (fileById.get(sourceId) ?? null) : null
+  const targetFile = targetId ? (fileById.get(targetId) ?? null) : null
 
   useEffect(() => {
     if (availableStructures.length === 0) {
@@ -1467,21 +1461,15 @@ function TransferToolPanel({
           <div className="mt-3 space-y-2 text-xs text-slate-600">
             <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <span>Source atoms</span>
-              <span className="font-mono">
-                {summarySource ?? '—'}
-              </span>
+              <span className="font-mono">{summarySource ?? '—'}</span>
             </div>
             <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <span>Target atoms</span>
-              <span className="font-mono">
-                {summaryTarget ?? '—'}
-              </span>
+              <span className="font-mono">{summaryTarget ?? '—'}</span>
             </div>
             <div className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <span>Transferred</span>
-              <span className="font-mono">
-                {summaryTransferred ?? '—'}
-              </span>
+              <span className="font-mono">{summaryTransferred ?? '—'}</span>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">

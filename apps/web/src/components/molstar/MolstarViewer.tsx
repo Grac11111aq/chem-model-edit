@@ -23,25 +23,10 @@ type MolstarViewerProps = {
   className?: string
 }
 
-type MolstarLoci = unknown
-type MolstarLocation = unknown
-
 type MolstarHelpers = {
-  StructureElement: {
-    Loci: {
-      is: (loci: MolstarLoci) => boolean
-      getFirstLocation: (loci: MolstarLoci) => MolstarLocation | null | undefined
-    }
-  }
-  StructureProperties: {
-    atom: {
-      sourceIndex: (location: MolstarLocation) => number
-    }
-  }
-  Bond: {
-    isLoci: (loci: MolstarLoci) => boolean
-    toFirstStructureElementLoci: (loci: MolstarLoci) => MolstarLoci
-  }
+  StructureElement: any
+  StructureProperties: any
+  Bond: any
 }
 
 const hashString = (value: string) => {
@@ -246,9 +231,8 @@ export default function MolstarViewer({
           if (isCancelled()) {
             break
           }
-          const structure = await plugin.builders.structure.createStructure(
-            model,
-          )
+          const structure =
+            await plugin.builders.structure.createStructure(model)
           if (isCancelled()) {
             break
           }
@@ -296,8 +280,7 @@ export default function MolstarViewer({
             selectionSignatureRef.current = selection.join(',')
           } else {
             applySelection(latestSelectionRef.current)
-            selectionSignatureRef.current =
-              latestSelectionRef.current.join(',')
+            selectionSignatureRef.current = latestSelectionRef.current.join(',')
           }
         }
         plugin.managers?.camera?.reset?.()
@@ -464,15 +447,12 @@ export default function MolstarViewer({
 
     const setup = async () => {
       if (!helpersRef.current) {
-        const [
-          { StructureElement },
-          { StructureProperties },
-          { Bond },
-        ] = await Promise.all([
-          import('molstar/lib/mol-model/structure/structure/element'),
-          import('molstar/lib/mol-model/structure/structure/properties'),
-          import('molstar/lib/mol-model/structure/structure/unit/bonds'),
-        ])
+        const [{ StructureElement }, { StructureProperties }, { Bond }] =
+          await Promise.all([
+            import('molstar/lib/mol-model/structure/structure/element'),
+            import('molstar/lib/mol-model/structure/structure/properties'),
+            import('molstar/lib/mol-model/structure/structure/unit/bonds'),
+          ])
         helpersRef.current = { StructureElement, StructureProperties, Bond }
       }
       if (cancelled) {
