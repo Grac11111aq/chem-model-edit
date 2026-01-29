@@ -11,6 +11,12 @@ from pydantic import ValidationError
 from redis.exceptions import RedisError
 
 from models import (
+    AuthLoginRequest,
+    AuthLogoutResponse,
+    AuthMeResponse,
+    AuthRegisterRequest,
+    AuthSessionResponse,
+    AuthUserResponse,
     DeltaTransplantRequest,
     DeltaTransplantResponse,
     ExportRequest,
@@ -35,19 +41,30 @@ from models import (
     ZPEJobStatusResponse,
     ZPEComputeRegisterRequest,
     ZPEComputeRegisterResponse,
+    ZPEComputeRevokeResponse,
+    ZPEComputeLeaseResponse,
+    ZPEComputeResultRequest,
+    ZPEComputeResultResponse,
+    ZPEComputeFailedRequest,
+    ZPEComputeFailedResponse,
+    ZPEQueueTarget,
+    ZPEQueueTargetListResponse,
+    ZPEQueueTargetSelectRequest,
+    ZPEQueueTargetSelectResponse,
     ZPEEnrollTokenRequest,
     ZPEEnrollTokenResponse,
     ZPEParseRequest,
     ZPEParseResponse,
     ZPEResult,
 )
+from services.auth import get_auth_store
 from services.export import export_qe_in
 from services.lattice import params_to_vectors, vectors_to_params
 from services.parse import parse_qe_in, structure_from_ase
 from services.structures import (
     create_structure_from_qe,
     get_structure,
-    get_structure_bcif,
+    get_structure_cif,
     get_structure_entry,
     register_structure_atoms,
 )
@@ -64,6 +81,11 @@ from services.zpe import (
     get_zpe_settings,
 )
 from services.zpe.enroll import get_enroll_store
+from services.zpe.job_owner import get_job_owner_store
+from services.zpe.lease import lease_next_job
+from services.zpe.compute_results import submit_failure, submit_result
+from services.zpe.queue_targets import get_queue_target_store
+from services.zpe.worker_auth import get_worker_token_store
 from services.zpe.parse import (
     extract_fixed_indices,
     parse_atomic_species,
@@ -138,6 +160,57 @@ def require_admin(request: Request) -> None:
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
+def _has_admin_access(request: Request) -> bool:
+    settings = get_zpe_settings()
+    if not settings.admin_token:
+        return False
+    token = _extract_admin_token(request)
+    return bool(token and secrets.compare_digest(token, settings.admin_token))
+
+
+def _extract_bearer_token(request: Request) -> str | None:
+    auth = request.headers.get("authorization")
+    if auth and auth.lower().startswith("bearer "):
+        token = auth.split(" ", 1)[1].strip()
+        return token or None
+    return None
+
+
+def _require_user_session(request: Request):
+    store = get_auth_store()
+    token = _extract_bearer_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="unauthorized")
+    session = store.get_user_by_session(token, refresh=True)
+    if not session:
+        raise HTTPException(status_code=401, detail="unauthorized")
+    user = store.get_user_by_id(session.user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="unauthorized")
+    return user, session
+
+
+def _extract_worker_token(request: Request) -> str | None:
+    auth = request.headers.get("authorization")
+    if auth and auth.lower().startswith("bearer "):
+        token = auth.split(" ", 1)[1].strip()
+        return token or None
+    return None
+
+
+def require_worker(request: Request) -> str:
+    token = _extract_worker_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="missing worker token")
+    store = get_worker_token_store()
+    try:
+        return store.validate(token)
+    except PermissionError as exc:
+        detail = str(exc) or "invalid token"
+        status = 403 if "revoked" in detail else 401
+        raise HTTPException(status_code=status, detail=detail) from exc
+
+
 def _ensure_job_finished(job_id: str) -> None:
     store = get_result_store()
     try:
@@ -154,9 +227,76 @@ def _ensure_job_finished(job_id: str) -> None:
         )
 
 
+def _require_job_owner(request: Request, job_id: str):
+    user, _session = _require_user_session(request)
+    owner_store = get_job_owner_store()
+    owner_id = owner_store.get_owner(job_id)
+    if not owner_id:
+        raise HTTPException(status_code=404, detail="job not found")
+    if owner_id != user.user_id:
+        raise HTTPException(status_code=403, detail="forbidden")
+    return user
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/auth/register", response_model=AuthSessionResponse)
+def auth_register(request: AuthRegisterRequest) -> AuthSessionResponse:
+    store = get_auth_store()
+    user = store.create_user(request.email, request.password)
+    session = store.create_session(user.user_id)
+    return AuthSessionResponse(
+        token=session.token,
+        expires_at=session.expires_at,
+        user=AuthUserResponse(
+            user_id=user.user_id,
+            email=user.email,
+            created_at=user.created_at,
+        ),
+    )
+
+
+@app.post("/auth/login", response_model=AuthSessionResponse)
+def auth_login(request: AuthLoginRequest) -> AuthSessionResponse:
+    store = get_auth_store()
+    user = store.authenticate(request.email, request.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="invalid credentials")
+    session = store.create_session(user.user_id)
+    return AuthSessionResponse(
+        token=session.token,
+        expires_at=session.expires_at,
+        user=AuthUserResponse(
+            user_id=user.user_id,
+            email=user.email,
+            created_at=user.created_at,
+        ),
+    )
+
+
+@app.post("/auth/logout", response_model=AuthLogoutResponse)
+def auth_logout(raw: Request) -> AuthLogoutResponse:
+    store = get_auth_store()
+    token = _extract_bearer_token(raw)
+    if token:
+        store.delete_session(token)
+    return AuthLogoutResponse()
+
+
+@app.get("/auth/me", response_model=AuthMeResponse)
+def auth_me(raw: Request) -> AuthMeResponse:
+    user, session = _require_user_session(raw)
+    return AuthMeResponse(
+        user=AuthUserResponse(
+            user_id=user.user_id,
+            email=user.email,
+            created_at=user.created_at,
+        ),
+        expires_at=session.expires_at,
+    )
 
 
 @app.post("/parse", response_model=ParseResponse)
@@ -187,23 +327,17 @@ def get_structure_route(structure_id: str) -> StructureGetResponse:
 @app.get("/structures/{structure_id}/view")
 def view_structure(
     structure_id: str,
-    format: str = Query("bcif"),
-    lossy: int = Query(0, ge=0, le=1),
-    precision: int = Query(3, ge=0),
+    format: str = Query("cif"),
 ) -> Response:
-    if format != "bcif":
+    if format != "cif":
         raise HTTPException(status_code=400, detail="Unsupported format")
 
     try:
-        bcif = get_structure_bcif(
-            structure_id,
-            lossy=lossy == 1,
-            precision=precision if lossy == 1 else None,
-        )
+        cif = get_structure_cif(structure_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Structure not found") from exc
 
-    return Response(content=bcif, media_type="application/x-bcif")
+    return Response(content=cif, media_type="chemical/x-cif")
 
 
 @app.post("/export", response_model=ExportResponse)
@@ -351,10 +485,14 @@ def zpe_parse(request: ZPEParseRequest) -> ZPEParseResponse:
         try:
             structure = get_structure(request.structure_id)
         except KeyError as exc:
-            raise HTTPException(
-                status_code=404, detail="Structure not found"
-            ) from exc
+            raise HTTPException(status_code=404, detail="Structure not found") from exc
         fixed_indices = extract_fixed_indices(request.content)
+        atoms = parse_qe_atoms(request.content)
+        if len(atoms) != len(structure.atoms):
+            raise HTTPException(
+                status_code=409,
+                detail="Structure does not match QE input atom count",
+            )
     else:
         structure, fixed_indices = parse_qe_structure(request.content)
     kpts = parse_kpoints_automatic(request.content)
@@ -367,16 +505,19 @@ def zpe_parse(request: ZPEParseRequest) -> ZPEParseResponse:
 
 
 @app.post("/calc/zpe/jobs", response_model=ZPEJobResponse)
-def zpe_jobs(request: ZPEJobRequest) -> ZPEJobResponse:
+def zpe_jobs(request: ZPEJobRequest, raw: Request) -> ZPEJobResponse:
+    user, _session = _require_user_session(raw)
+    target_store = get_queue_target_store()
+    target = target_store.get_active_target(user.user_id)
+    if not target:
+        raise HTTPException(status_code=400, detail="no active queue target")
     if request.structure_id:
         try:
             structure = get_structure(request.structure_id)
         except KeyError as exc:
-            raise HTTPException(
-                status_code=404, detail="Structure not found"
-            ) from exc
+            raise HTTPException(status_code=404, detail="Structure not found") from exc
         fixed_indices = extract_fixed_indices(request.content)
-        atoms, _ = parse_qe_atoms(request.content)
+        atoms = parse_qe_atoms(request.content)
         if len(atoms) != len(structure.atoms):
             raise HTTPException(
                 status_code=409,
@@ -389,19 +530,29 @@ def zpe_jobs(request: ZPEJobRequest) -> ZPEJobResponse:
     )
     payload = request.model_dump()
     payload["mobile_indices"] = mobile_indices
-    job_id = enqueue_zpe_job(payload)
+    job_id = enqueue_zpe_job(payload, queue_name=target.queue_name)
+    owner_store = get_job_owner_store()
+    owner_store.set_owner(job_id, user.user_id)
     return ZPEJobResponse(job_id=job_id)
+
 
 @app.post("/calc/zpe/compute/enroll-tokens", response_model=ZPEEnrollTokenResponse)
 def zpe_compute_enroll_token(
     request: ZPEEnrollTokenRequest,
     raw: Request,
 ) -> ZPEEnrollTokenResponse:
-    require_admin(raw)
+    owner_id = None
+    if not _has_admin_access(raw):
+        user, _session = _require_user_session(raw)
+        owner_id = user.user_id
     if request.ttl_seconds is not None and request.ttl_seconds <= 0:
         raise HTTPException(status_code=400, detail="ttl_seconds must be >= 1")
     store = get_enroll_store()
-    token = store.create_token(ttl_seconds=request.ttl_seconds, label=request.label)
+    token = store.create_token(
+        ttl_seconds=request.ttl_seconds,
+        label=request.label,
+        owner_id=owner_id,
+    )
     return ZPEEnrollTokenResponse(
         token=token.token,
         expires_at=token.expires_at,
@@ -410,7 +561,9 @@ def zpe_compute_enroll_token(
     )
 
 
-@app.post("/calc/zpe/compute/servers/register", response_model=ZPEComputeRegisterResponse)
+@app.post(
+    "/calc/zpe/compute/servers/register", response_model=ZPEComputeRegisterResponse
+)
 def zpe_compute_register(
     request: ZPEComputeRegisterRequest,
 ) -> ZPEComputeRegisterResponse:
@@ -423,13 +576,151 @@ def zpe_compute_register(
         )
     except KeyError as exc:
         raise HTTPException(status_code=400, detail="invalid enroll token") from exc
+    queue_name = request.queue_name or get_zpe_settings().queue_name
+    if registration.owner_id:
+        target_store = get_queue_target_store()
+        target = target_store.add_target(
+            user_id=registration.owner_id,
+            queue_name=queue_name,
+            server_id=registration.server_id,
+            name=request.name,
+        )
+        if not target_store.get_active_target(registration.owner_id):
+            target_store.set_active_target(registration.owner_id, target.target_id)
+    token_store = get_worker_token_store()
+    worker_token = token_store.create_token(registration.server_id, label=request.name)
     return ZPEComputeRegisterResponse(
         server_id=registration.server_id,
         registered_at=registration.registered_at,
         name=registration.name,
+        worker_token=worker_token.token,
+        token_expires_at=worker_token.expires_at,
+        token_ttl_seconds=worker_token.ttl_seconds,
+    )
+@app.get("/calc/zpe/compute/targets", response_model=ZPEQueueTargetListResponse)
+def zpe_compute_targets(raw: Request) -> ZPEQueueTargetListResponse:
+    user, _session = _require_user_session(raw)
+    target_store = get_queue_target_store()
+    targets = [
+        ZPEQueueTarget(
+            target_id=target.target_id,
+            queue_name=target.queue_name,
+            server_id=target.server_id,
+            registered_at=target.registered_at,
+            name=target.name,
+        )
+        for target in target_store.list_targets(user.user_id)
+    ]
+    active = target_store.get_active_target(user.user_id)
+    return ZPEQueueTargetListResponse(
+        targets=targets,
+        active_target_id=active.target_id if active else None,
+    )
+
+
+@app.post(
+    "/calc/zpe/compute/targets/select",
+    response_model=ZPEQueueTargetSelectResponse,
+)
+def zpe_compute_target_select(
+    request: ZPEQueueTargetSelectRequest,
+    raw: Request,
+) -> ZPEQueueTargetSelectResponse:
+    user, _session = _require_user_session(raw)
+    target_store = get_queue_target_store()
+    try:
+        target_store.ensure_target_owner(user.user_id, request.target_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="target not found") from exc
+    target_store.set_active_target(user.user_id, request.target_id)
+    return ZPEQueueTargetSelectResponse(active_target_id=request.target_id)
+
+
+@app.delete(
+    "/calc/zpe/compute/servers/{server_id}",
+    response_model=ZPEComputeRevokeResponse,
+)
+def zpe_compute_revoke(
+    server_id: str,
+    raw: Request,
+) -> ZPEComputeRevokeResponse:
+    require_admin(raw)
+    token_store = get_worker_token_store()
+    revoked = token_store.revoke_tokens_for_worker(server_id)
+    return ZPEComputeRevokeResponse(revoked_count=revoked)
+
+
+@app.post(
+    "/calc/zpe/compute/jobs/lease",
+    response_model=ZPEComputeLeaseResponse,
+)
+def zpe_compute_lease(raw: Request) -> Response | ZPEComputeLeaseResponse:
+    worker_id = require_worker(raw)
+    lease = lease_next_job(worker_id)
+    if lease is None:
+        return Response(status_code=204)
+    return ZPEComputeLeaseResponse(
+        job_id=lease.job_id,
+        payload=lease.payload,
+        lease_id=lease.lease_id,
+        lease_ttl_seconds=lease.lease_ttl_seconds,
+    )
+
+
+@app.post(
+    "/calc/zpe/compute/jobs/{job_id}/result",
+    response_model=ZPEComputeResultResponse,
+)
+def zpe_compute_result(
+    job_id: str,
+    request: ZPEComputeResultRequest,
+    raw: Request,
+) -> ZPEComputeResultResponse:
+    worker_id = require_worker(raw)
+    try:
+        outcome = submit_result(
+            job_id=job_id,
+            worker_id=worker_id,
+            lease_id=request.lease_id,
+            result=request.result,
+            summary_text=request.summary_text,
+            freqs_csv=request.freqs_csv,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return ZPEComputeResultResponse(idempotent=outcome.idempotent)
+
+
+@app.post(
+    "/calc/zpe/compute/jobs/{job_id}/failed",
+    response_model=ZPEComputeFailedResponse,
+)
+def zpe_compute_failed(
+    job_id: str,
+    request: ZPEComputeFailedRequest,
+    raw: Request,
+) -> ZPEComputeFailedResponse:
+    worker_id = require_worker(raw)
+    try:
+        outcome = submit_failure(
+            job_id=job_id,
+            worker_id=worker_id,
+            lease_id=request.lease_id,
+            error_code=request.error_code,
+            error_message=request.error_message,
+            traceback=request.traceback,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return ZPEComputeFailedResponse(
+        requeued=outcome.requeued,
+        retry_count=outcome.retry_count,
     )
 @app.get("/calc/zpe/jobs/{job_id}", response_model=ZPEJobStatusResponse)
-def zpe_job_status(job_id: str) -> ZPEJobStatusResponse:
+def zpe_job_status(job_id: str, raw: Request) -> ZPEJobStatusResponse:
+    _require_job_owner(raw, job_id)
     store = get_result_store()
     try:
         status = store.get_status(job_id)
@@ -443,13 +734,16 @@ def zpe_job_status(job_id: str) -> ZPEJobStatusResponse:
 
 
 @app.get("/calc/zpe/jobs/{job_id}/result", response_model=ZPEJobResultResponse)
-def zpe_job_result(job_id: str) -> ZPEJobResultResponse:
+def zpe_job_result(job_id: str, raw: Request) -> ZPEJobResultResponse:
+    _require_job_owner(raw, job_id)
     store = get_result_store()
     _ensure_job_finished(job_id)
     try:
         result_dict = store.get_result(job_id)
     except KeyError as exc:
-        raise HTTPException(status_code=500, detail="result missing after completion") from exc
+        raise HTTPException(
+            status_code=500, detail="result missing after completion"
+        ) from exc
     try:
         result = ZPEResult(**result_dict)
     except ValidationError as exc:
@@ -459,8 +753,11 @@ def zpe_job_result(job_id: str) -> ZPEJobResultResponse:
 
 @app.get("/calc/zpe/jobs/{job_id}/files")
 def zpe_job_files(
-    job_id: str, kind: Literal["summary", "freqs"] = Query(...)
+    job_id: str,
+    raw: Request,
+    kind: Literal["summary", "freqs"] = Query(...),
 ) -> Response:
+    _require_job_owner(raw, job_id)
     store = get_result_store()
     _ensure_job_finished(job_id)
     try:
@@ -468,11 +765,13 @@ def zpe_job_files(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except KeyError as exc:
-        raise HTTPException(status_code=500, detail="file missing after completion") from exc
+        raise HTTPException(
+            status_code=500, detail="file missing after completion"
+        ) from exc
     filename = "summary.txt" if kind == "summary" else "freqs.csv"
     media_type = "text/plain" if kind == "summary" else "text/csv"
     return Response(
         content=payload,
         media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

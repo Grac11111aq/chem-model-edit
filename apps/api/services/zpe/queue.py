@@ -12,9 +12,10 @@ def get_redis_connection() -> Redis:
     return Redis.from_url(settings.redis_url)
 
 
-def get_queue() -> Queue:
+def get_queue(name: str | None = None) -> Queue:
     settings = get_zpe_settings()
-    return Queue(settings.queue_name, connection=get_redis_connection())
+    queue_name = name or settings.queue_name
+    return Queue(queue_name, connection=get_redis_connection())
 
 
 def fetch_job(job_id: str) -> Job:

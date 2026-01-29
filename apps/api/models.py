@@ -279,6 +279,7 @@ class ZPEEnrollTokenResponse(BaseModel):
 class ZPEComputeRegisterRequest(BaseModel):
     token: str
     name: Optional[str] = None
+    queue_name: Optional[str] = None
     meta: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -286,3 +287,95 @@ class ZPEComputeRegisterResponse(BaseModel):
     server_id: str
     registered_at: str
     name: Optional[str] = None
+    worker_token: str
+    token_expires_at: str
+    token_ttl_seconds: int
+
+
+class ZPEQueueTarget(BaseModel):
+    target_id: str
+    queue_name: str
+    server_id: str
+    registered_at: str
+    name: Optional[str] = None
+
+
+class ZPEQueueTargetListResponse(BaseModel):
+    targets: List[ZPEQueueTarget]
+    active_target_id: Optional[str] = None
+
+
+class ZPEQueueTargetSelectRequest(BaseModel):
+    target_id: str
+
+
+class ZPEQueueTargetSelectResponse(BaseModel):
+    active_target_id: str
+
+
+class ZPEComputeRevokeResponse(BaseModel):
+    revoked_count: int
+
+
+class ZPEComputeLeaseResponse(BaseModel):
+    job_id: str
+    payload: Dict[str, Any]
+    lease_id: str
+    lease_ttl_seconds: int
+
+
+class ZPEComputeResultRequest(BaseModel):
+    lease_id: str
+    result: Dict[str, Any]
+    summary_text: str
+    freqs_csv: str
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ZPEComputeResultResponse(BaseModel):
+    ok: bool = True
+    idempotent: bool = False
+
+
+class ZPEComputeFailedRequest(BaseModel):
+    lease_id: str
+    error_code: str
+    error_message: str
+    traceback: Optional[str] = None
+
+
+class ZPEComputeFailedResponse(BaseModel):
+    ok: bool = True
+    requeued: bool
+    retry_count: int
+
+
+class AuthRegisterRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthUserResponse(BaseModel):
+    user_id: str
+    email: str
+    created_at: str
+
+
+class AuthSessionResponse(BaseModel):
+    token: str
+    expires_at: str
+    user: AuthUserResponse
+
+
+class AuthMeResponse(BaseModel):
+    user: AuthUserResponse
+    expires_at: str
+
+
+class AuthLogoutResponse(BaseModel):
+    ok: bool = True

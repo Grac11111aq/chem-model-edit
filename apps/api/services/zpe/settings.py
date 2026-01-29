@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 import os
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, Literal, Optional, cast
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -32,8 +32,10 @@ class ZPESettings(BaseSettings):
     queue_name: str = "zpe"
     compute_mode: str = "remote-queue"
     result_store: str = "redis"
+    worker_mode: Literal["qe", "mock"] = "qe"
     admin_token: Optional[str] = None
     enroll_token_ttl_seconds: int = 3600
+    worker_token_ttl_seconds: int = 604800
 
     pw_command: str = "pw.x"
     pw_path: Optional[str] = None
@@ -52,8 +54,17 @@ class ZPESettings(BaseSettings):
     calc_dir_name: str = "vib_ads_vac"
     job_timeout_seconds: int = 86400
     result_ttl_seconds: int = 604800
+    lease_ttl_seconds: int = 600
+    retry_max: int = 3
+    retry_base_delay_seconds: int = 10
+    retry_max_delay_seconds: int = 300
 
     environ_path: Optional[str] = None
+    control_api_url: str = "http://localhost:8000"
+    worker_token: Optional[str] = None
+    worker_poll_interval_seconds: int = 10
+    worker_poll_max_interval_seconds: int = 60
+    worker_request_timeout_seconds: int = 60
 
 
 @lru_cache

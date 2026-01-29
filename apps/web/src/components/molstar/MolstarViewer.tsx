@@ -3,18 +3,18 @@ import type { Viewer } from 'molstar/lib/apps/viewer/app'
 
 import { cn } from '@/lib/utils'
 
-type MolstarStructure = {
+type MolstarViewerStructure = {
   id: string
   pdbText?: string
-  bcifUrl?: string
+  cifUrl?: string
   opacity?: number
   visible?: boolean
 }
 
 type MolstarViewerProps = {
   pdbText?: string
-  bcifUrl?: string
-  structures?: Array<MolstarStructure>
+  cifUrl?: string
+  structures?: Array<MolstarViewerStructure>
   onError?: (message: string) => void
   onLoad?: () => void
   selectedAtomIndices?: Array<number>
@@ -23,27 +23,10 @@ type MolstarViewerProps = {
   className?: string
 }
 
-type MolstarLoci = unknown
-type MolstarLocation = unknown
-
 type MolstarHelpers = {
-  StructureElement: {
-    Loci: {
-      is: (loci: MolstarLoci) => boolean
-      getFirstLocation: (
-        loci: MolstarLoci,
-      ) => MolstarLocation | null | undefined
-    }
-  }
-  StructureProperties: {
-    atom: {
-      sourceIndex: (location: MolstarLocation) => number
-    }
-  }
-  Bond: {
-    isLoci: (loci: MolstarLoci) => boolean
-    toFirstStructureElementLoci: (loci: MolstarLoci) => MolstarLoci
-  }
+  StructureElement: any
+  StructureProperties: any
+  Bond: any
 }
 
 const hashString = (value: string) => {
@@ -63,7 +46,7 @@ const signatureForText = (value: string) => {
 
 export default function MolstarViewer({
   pdbText,
-  bcifUrl,
+  cifUrl,
   structures,
   onError,
   onLoad,
@@ -88,18 +71,18 @@ export default function MolstarViewer({
   const disabledSetRef = useRef<Set<number>>(new Set())
   const [viewerReady, setViewerReady] = useState(false)
 
-  const normalizedStructures = useMemo<Array<MolstarStructure>>(() => {
+  const normalizedStructures = useMemo<Array<MolstarViewerStructure>>(() => {
     if (structures && structures.length > 0) {
       return structures
     }
-    if (bcifUrl) {
-      return [{ id: 'single', bcifUrl, opacity: 1, visible: true }]
+    if (cifUrl) {
+      return [{ id: 'single', cifUrl, opacity: 1, visible: true }]
     }
     if (pdbText) {
       return [{ id: 'single', pdbText, opacity: 1, visible: true }]
     }
     return []
-  }, [bcifUrl, pdbText, structures])
+  }, [cifUrl, pdbText, structures])
 
   const signature = useMemo(() => {
     if (normalizedStructures.length === 0) {
@@ -109,8 +92,8 @@ export default function MolstarViewer({
       .map((structure) => {
         const opacity = structure.opacity ?? 1
         const visible = structure.visible ?? true
-        const payloadSignature = structure.bcifUrl
-          ? `bcif:${structure.bcifUrl}`
+        const payloadSignature = structure.cifUrl
+          ? `cif:${structure.cifUrl}`
           : structure.pdbText
             ? `pdb:${signatureForText(structure.pdbText)}`
             : 'empty'
@@ -161,22 +144,41 @@ export default function MolstarViewer({
       disabledSet.size > 0
         ? indices.filter((index) => !disabledSet.has(index))
         : indices
-    viewer.structureInteractivity({ action: 'select' })
+    try {
+      viewer.structureInteractivity({ action: 'select' })
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Mol* selection update failed.'
+      console.error('Mol* selection clear failed.', error)
+      onError?.(message)
+      return
+    }
     if (filtered.length === 0) {
       return
     }
-    viewer.structureInteractivity({
-      action: 'select',
-      applyGranularity: false,
-      elements: {
-        items: filtered.map((index) => ({ atom_index: index })),
-      },
-    })
+    try {
+      viewer.structureInteractivity({
+        action: 'select',
+        applyGranularity: false,
+        elements: {
+          items: { atom_index: filtered },
+        },
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Mol* selection update failed.'
+      console.error('Mol* selection apply failed.', error)
+      onError?.(message)
+    }
   }
 
   const loadBallAndStick = async (
     viewer: Viewer,
-    items: Array<MolstarStructure>,
+    items: Array<MolstarViewerStructure>,
     loadSignature: string,
   ) => {
     const plugin = (viewer as unknown as { plugin: any }).plugin
@@ -202,28 +204,28 @@ export default function MolstarViewer({
         }
         try {
           let data = null
-          let format: 'pdb' | 'bcif' = 'pdb'
-          if (item.bcifUrl) {
-            const response = await fetch(item.bcifUrl, {
+          let format: 'pdb' | 'cif' = 'pdb'
+          if (item.cifUrl) {
+            const response = await fetch(item.cifUrl, {
               signal: controller.signal,
             })
             if (!response.ok) {
-              lastError = `BCIF fetch failed (HTTP ${response.status})`
-              console.error('Mol* bcif 取得に失敗しました。', response.status)
+              lastError = `CIF fetch failed (HTTP ${response.status})`
+              console.error('Mol* cif 取得に失敗しました。', response.status)
               continue
             }
             if (isCancelled()) {
               break
             }
-            const buffer = await response.arrayBuffer()
+            const text = await response.text()
             if (isCancelled()) {
               break
             }
             data = await plugin.builders.data.rawData(
-              { data: new Uint8Array(buffer) },
+              { data: text },
               { state: { isGhost: true } },
             )
-            format = 'bcif'
+            format = 'cif'
           } else if (item.pdbText) {
             data = await plugin.builders.data.rawData(
               { data: item.pdbText },
@@ -310,6 +312,8 @@ export default function MolstarViewer({
   }
 
   const clearViewer = async (viewer: Viewer) => {
+    abortRef.current?.abort()
+    abortRef.current = null
     const plugin = (viewer as unknown as { plugin: any }).plugin
     await plugin.clear()
     structureReadyRef.current = null
@@ -340,7 +344,7 @@ export default function MolstarViewer({
           viewportShowExpand: false,
           viewportShowControls: false,
           backgroundColor: 0x0b1120,
-          customFormats: [['bcif', CifCoreProvider]],
+          customFormats: [['cif', CifCoreProvider]],
         })
         if (!activeRef.current) {
           viewer.dispose()
@@ -470,11 +474,7 @@ export default function MolstarViewer({
             import('molstar/lib/mol-model/structure/structure/properties'),
             import('molstar/lib/mol-model/structure/structure/unit/bonds'),
           ])
-        helpersRef.current = {
-          StructureElement,
-          StructureProperties,
-          Bond,
-        } as unknown as MolstarHelpers
+        helpersRef.current = { StructureElement, StructureProperties, Bond }
       }
       if (cancelled) {
         return
@@ -490,7 +490,7 @@ export default function MolstarViewer({
           if (!helpers) {
             return
           }
-          const loci = event?.current?.loci
+          const loci = event?.current
           let elementLoci = loci
           if (helpers.Bond.isLoci(loci)) {
             elementLoci = helpers.Bond.toFirstStructureElementLoci(loci)

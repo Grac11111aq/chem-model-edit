@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Cuboid, Minus, X } from 'lucide-react'
 
 import { CollapsibleSection } from './CollapsibleSection'
+import { AtomTable } from './AtomTable'
 
 import type { WorkspaceFile } from '../types'
 import type { Structure } from '@/lib/types'
@@ -40,7 +41,7 @@ export function FilePanel({
 
   useEffect(() => {
     setViewerError(null)
-  }, [data.bcifUrl, data.pdbText])
+  }, [data.cifUrl, data.pdbText])
 
   useEffect(() => {
     onStructureLoadedRef.current = onStructureLoaded
@@ -82,6 +83,18 @@ export function FilePanel({
   }, [data.structure, data.structureId])
 
   const atoms = structure?.atoms ?? []
+  const atomRows = atoms.map((atom, index) => ({
+    index,
+    symbol: atom.symbol,
+    x: atom.x,
+    y: atom.y,
+    z: atom.z,
+  }))
+  const tableEmptyText = isTableLoading
+    ? 'Loading...'
+    : tableError
+      ? 'Failed to load structure.'
+      : 'No atoms.'
 
   return (
     <div
@@ -131,9 +144,9 @@ export function FilePanel({
         <div className="group relative flex h-1/2 min-h-[220px] w-full flex-col overflow-hidden rounded-lg border border-border bg-card">
           <div className="absolute inset-0 bg-grid-slate-200/50 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.7))]" />
           <div className="relative z-10 flex w-full flex-1 flex-col">
-            {data.bcifUrl ? (
+            {data.cifUrl ? (
               <MolstarViewer
-                bcifUrl={data.bcifUrl}
+                cifUrl={data.cifUrl}
                 onError={setViewerError}
                 onLoad={() => setViewerError(null)}
               />
@@ -163,95 +176,82 @@ export function FilePanel({
           ) : null}
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden pr-1">
           <CollapsibleSection
             title="Table"
             defaultOpen={data.initialOpenSections.table}
+            className="flex min-h-0 flex-1 flex-col"
+            contentClassName="flex min-h-0 flex-1 flex-col"
           >
-            <div className="space-y-2">
-              <p className="mb-1 text-xs text-muted-foreground">
+            <div className="flex min-h-0 flex-1 flex-col gap-2">
+              <p className="text-xs text-muted-foreground">
                 Atomic Positions (Angstrom)
               </p>
-              <div className="rounded border border-slate-100 bg-slate-50 p-2 text-xs font-mono">
-                <div className="mb-1 grid grid-cols-4 gap-2 border-b border-slate-200 pb-1 font-bold text-slate-600">
-                  <span>El</span>
-                  <span>X</span>
-                  <span>Y</span>
-                  <span>Z</span>
-                </div>
-                {isTableLoading ? (
-                  <div className="py-2 text-slate-400">Loading...</div>
-                ) : tableError ? (
-                  <div className="py-2 text-red-500">
-                    Failed to load structure.
-                  </div>
-                ) : atoms.length === 0 ? (
-                  <div className="py-2 text-slate-400">No atoms.</div>
-                ) : (
-                  atoms.map((atom, index) => (
-                    <div
-                      key={`${atom.symbol}-${index}`}
-                      className="grid grid-cols-4 gap-2"
-                    >
-                      <span>{atom.symbol}</span>
-                      <span>{atom.x.toFixed(4)}</span>
-                      <span>{atom.y.toFixed(4)}</span>
-                      <span>{atom.z.toFixed(4)}</span>
-                    </div>
-                  ))
-                )}
+              <div className="min-h-0 flex-1">
+                <AtomTable
+                  rows={atomRows}
+                  digits={4}
+                  emptyText={tableEmptyText}
+                  showIndex
+                  containerClassName="h-full rounded border border-slate-100 bg-slate-50 p-2"
+                />
               </div>
             </div>
           </CollapsibleSection>
 
-          <CollapsibleSection
-            title="Parameters"
-            defaultOpen={data.initialOpenSections.parameter}
-          >
-            <div className="space-y-2">
-              <p className="mb-1 text-xs text-muted-foreground">
-                QE Option Params
-              </p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="flex flex-col gap-1">
-                  <label htmlFor="param-ecutwfc" className="text-slate-500">
-                    ecutwfc
-                  </label>
-                  <input
-                    id="param-ecutwfc"
-                    type="text"
-                    value="30.0"
-                    className="rounded border border-slate-200 bg-slate-50 px-2 py-1"
-                    readOnly
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label htmlFor="param-mixing-beta" className="text-slate-500">
-                    mixing_beta
-                  </label>
-                  <input
-                    id="param-mixing-beta"
-                    type="text"
-                    value="0.7"
-                    className="rounded border border-slate-200 bg-slate-50 px-2 py-1"
-                    readOnly
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label htmlFor="param-conv-thr" className="text-slate-500">
-                    conv_thr
-                  </label>
-                  <input
-                    id="param-conv-thr"
-                    type="text"
-                    value="1.0d-8"
-                    className="rounded border border-slate-200 bg-slate-50 px-2 py-1"
-                    readOnly
-                  />
+          <div className="shrink-0">
+            <CollapsibleSection
+              title="Parameters"
+              defaultOpen={data.initialOpenSections.parameter}
+            >
+              <div className="space-y-2">
+                <p className="mb-1 text-xs text-muted-foreground">
+                  QE Option Params
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="param-ecutwfc" className="text-slate-500">
+                      ecutwfc
+                    </label>
+                    <input
+                      id="param-ecutwfc"
+                      type="text"
+                      value="30.0"
+                      className="rounded border border-slate-200 bg-slate-50 px-2 py-1"
+                      readOnly
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label
+                      htmlFor="param-mixing-beta"
+                      className="text-slate-500"
+                    >
+                      mixing_beta
+                    </label>
+                    <input
+                      id="param-mixing-beta"
+                      type="text"
+                      value="0.7"
+                      className="rounded border border-slate-200 bg-slate-50 px-2 py-1"
+                      readOnly
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="param-conv-thr" className="text-slate-500">
+                      conv_thr
+                    </label>
+                    <input
+                      id="param-conv-thr"
+                      type="text"
+                      value="1.0d-8"
+                      className="rounded border border-slate-200 bg-slate-50 px-2 py-1"
+                      readOnly
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          </CollapsibleSection>
+            </CollapsibleSection>
+          </div>
         </div>
       </div>
     </div>
